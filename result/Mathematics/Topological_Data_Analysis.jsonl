@@ -1,0 +1,90 @@
+FINAL ANSWER: {
+  "language": "English",
+  "original_question": "What is the application deadline for the IAS/Park City Mathematics Institute Research Topic Proposal?",
+  "steps": [
+    {
+      "type": "inject",
+      "before": "What is the application deadline for the IAS/Park City Mathematics Institute Research Topic Proposal?",
+      "after": "What is the application deadline for the Institute for Advanced Study’s open call to organize the three-week Park City mathematics summer session in 2027–2028, with proposals submitted via MathPrograms.org?",
+      "descriptor": "the Institute for Advanced Study’s open call to organize the three-week Park City mathematics summer session in 2027–2028, with proposals submitted via MathPrograms.org",
+      "used_facts": [
+        {"fact": "It is an open call for proposals to organize a summer session in 2027 and 2028.", "url": "https://www.ias.edu/pcmi/request-future-pcmi-research-topics", "quote": "This is an open call for proposals to organize a summer session in the IAS/Park City Mathematics Institute (PCMI) in 2027 and 2028."},
+        {"fact": "The session is a three-week program held in Park City, Utah.", "url": "https://www.ias.edu/pcmi/request-future-pcmi-research-topics", "quote": "Each year, PCMI hosts approximately 200 mathematical researchers and students for a three-week session in Park City, Utah."},
+        {"fact": "Proposals are submitted via a MathPrograms.org page for this call.", "url": "https://www.ias.edu/pcmi/request-future-pcmi-research-topics", "quote": "Proposals can be submitted here: https://www.mathprograms.org/db/programs/1705"}
+      ],
+      "verify": {
+        "unique": true,
+        "same_entity": true,
+        "canonical_name": "PCMI Research Topic Proposal",
+        "support_domains": ["ias.edu","mathprograms.org"],
+        "support_urls": ["https://www.ias.edu/pcmi/request-future-pcmi-research-topics","https://www.mathprograms.org/db/programs/1705"],
+        "note": "IAS’s official page describes the 2027–2028 call and links directly to the MathPrograms listing (#1705), which names the PCMI Research Topic Proposal and provides the deadline; the descriptor maps uniquely to this entity."
+      }
+    },
+    {
+      "type": "fuzz",
+      "before": "What is the application deadline for the Institute for Advanced Study’s open call to organize the three-week Park City mathematics summer session in 2027–2028, with proposals submitted via MathPrograms.org?",
+      "after": "What is the deadline to apply for the Institute for Advanced Study’s call for proposals to organize the three-week Park City mathematics summer session in 2027–2028, with proposals submitted via MathPrograms.org?",
+      "fuzz_ops": ["synonym","synonym"],
+      "verify": {
+        "unique": true,
+        "same_entity": true,
+        "canonical_name": "PCMI Research Topic Proposal",
+        "support_domains": ["ias.edu","mathprograms.org"],
+        "support_urls": ["https://www.ias.edu/pcmi/request-future-pcmi-research-topics","https://www.mathprograms.org/db/programs/1705"],
+        "note": "Only wording was synonymized (“application deadline” → “deadline to apply”; “open call” → “call for proposals”); references and scope still resolve to the same MathPrograms listing linked from IAS."
+      }
+    }
+  ],
+  "final_question": "What is the deadline to apply for the Institute for Advanced Study’s call for proposals to organize the three-week Park City mathematics summer session in 2027–2028, with proposals submitted via MathPrograms.org?",
+  "warnings": []
+}
+FINAL ANSWER: {
+  "language": "English",
+  "original_question": "What is the publication year of Rubina Raja's analysis of Palmyra artifacts titled 'Palmyra in Perspective: A Decade of Research in Retrospect'?",
+  "steps": [
+    {
+      "type": "inject",
+      "before": "What is the publication year of Rubina Raja's analysis of Palmyra artifacts titled 'Palmyra in Perspective: A Decade of Research in Retrospect'?",
+      "after": "What is the publication year of the analysis of Palmyra artifacts titled 'Palmyra in Perspective: A Decade of Research in Retrospect' by the Aarhus University professor of classical archaeology who heads the Palmyra Portrait Project?",
+      "descriptor": "the Aarhus University professor of classical archaeology who heads the Palmyra Portrait Project",
+      "used_facts": [
+        {"fact": "She is professor of classical archaeology at Aarhus University.", "url": "https://www.au.dk/en/rubina.raja%40cas.au.dk", "quote": "Rubina Raja is professor of classical archaeology and art at Aarhus University, Denmark"},
+        {"fact": "She heads the Palmyra Portrait Project.", "url": "https://cas.au.dk/en/about-the-school/departments/archaeology-and-heritage-studies/news-and-events/news/show/artikel/rubina-raja-modtager-carlsbergfondets-forskningspris-2024", "quote": "She heads the Palmyra Portrait Project"},
+        {"fact": "She is the PI of the Palmyra Portrait Project.", "url": "https://urbnet.au.dk/research-projects/middle-east/former-projects/palmyraportrait/", "quote": "PI: Professor Rubina Raja"}
+      ],
+      "verify": {
+        "unique": true,
+        "same_entity": true,
+        "canonical_name": "Rubina Raja",
+        "support_domains": ["au.dk", "brepols.net", "antiquity.ac.uk"],
+        "support_urls": [
+          "https://urbnet.au.dk/publications-presentations-and-press/publications/2024",
+          "https://www.brepols.net/products/IS-9782503610320-1",
+          "https://www.antiquity.ac.uk/open/books/3628"
+        ],
+        "note": "Descriptor uniquely maps to Rubina Raja via AU pages. Publisher (Brepols) and UrbNet list the chapter 'Palmyra in Perspective: A Decade of Research in Retrospect' in 2024, confirming the same target and answer."
+      }
+    },
+    {
+      "type": "fuzz",
+      "before": "What is the publication year of the analysis of Palmyra artifacts titled 'Palmyra in Perspective: A Decade of Research in Retrospect' by the Aarhus University professor of classical archaeology who heads the Palmyra Portrait Project?",
+      "after": "What is the publication year of the study on Palmyrene material culture titled 'Palmyra in Perspective: A Decade of Research in Retrospect' by the Aarhus University professor of classical archaeology who heads the Palmyra Portrait Project?",
+      "fuzz_ops": ["synonym", "hypernym"],
+      "verify": {
+        "unique": true,
+        "same_entity": true,
+        "canonical_name": "Rubina Raja",
+        "support_domains": ["brepols.net", "au.dk", "antiquity.ac.uk"],
+        "support_urls": [
+          "https://www.brepols.net/products/IS-9782503610320-1",
+          "https://urbnet.au.dk/publications-presentations-and-press/publications/2024",
+          "https://www.antiquity.ac.uk/open/books/3628"
+        ],
+        "note": "Replacing 'analysis' with 'study' and 'Palmyra artifacts' with 'Palmyrene material culture' preserves meaning; searches still resolve to the same 2024 Brepols volume/chapter by Rubina Raja."
+      }
+    }
+  ],
+  "final_question": "What is the publication year of the study on Palmyrene material culture titled 'Palmyra in Perspective: A Decade of Research in Retrospect' by the Aarhus University professor of classical archaeology who heads the Palmyra Portrait Project?",
+  "warnings": []
+}
