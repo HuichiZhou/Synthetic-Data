@@ -3,6 +3,7 @@ import time
 import random
 import os
 from typing import List, Optional, Dict, Set, Any
+from dotenv import load_dotenv
 from openai import OpenAI
 from serpapi import Client
 from pathlib import Path
@@ -11,6 +12,7 @@ from client.prompt import ENTITY_CATEGORIES
 
 # ======================= 配置 =======================
 # API 配置
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 

@@ -23,6 +23,7 @@ try:
 except Exception:
     pd = None
 
+from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import AsyncOpenAI
@@ -408,6 +409,7 @@ def main() -> None:
     ap.add_argument("--no-exclude-wiki-sources", action="store_true", help="不剔除维基来源页（默认剔除）")
     ap.add_argument("--locale", choices=["en", "zh", "auto"], default="auto", help="抽取与提示语语言；auto=基于 topic 自动判断")
     args = ap.parse_args()
+    load_dotenv()
 
     rows = asyncio.run(
         run_pipeline(

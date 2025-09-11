@@ -10,9 +10,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from client.prompt import QA_SYSTEM
+from utils import extract_keys
 
 # ======================= 配置 =======================
 # API 配置
+load_dotenv()
 GENAI_API_BASE_URL = os.getenv("GENAI_API_BASE_URL")
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
 
@@ -24,8 +26,6 @@ OUTPUT_BASE = Path("result-gemini")
 MODEL_NAME = "gemini-2.5-pro"
 
 # ======================= 初始化 =======================
-load_dotenv()
-
 if not GENAI_API_KEY or not GENAI_API_BASE_URL:
     raise RuntimeError("Please set GENAI_API_KEY and GENAI_API_BASE_URL environment variables")
 
@@ -41,16 +41,7 @@ config = types.GenerateContentConfig(
     system_instruction=QA_SYSTEM
 )
 
-# ======================= 工具函数 =======================
-
-def extract_keys(json_line: str) -> tuple[str, str, str]:
-    """从JSONL行中提取question, ground_truth, data_source三个字段"""
-    data = json.loads(json_line)
-    return (
-        f"Question:{data['question']}",
-        f"Ground Truth:{data['ground_truth']}",
-        f"Data Source:{data['data_source']}",
-    )
+# ======================= 主流程 =======================
 
 def main():
     # ---------- 读入 ----------

@@ -6,9 +6,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from client.prompt import QA_SYSTEM
+from utils import extract_keys
 
 # ======================= 配置 =======================
 # API 配置
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 
@@ -20,24 +22,10 @@ OUTPUT_FILE = OUTPUT_DIR / "Behavioral_Economics.jsonl"
 # 模型配置
 MODEL_NAME = "gpt-5-search"
 
-# ======================= 初始化 =======================
-load_dotenv()
-
 if not OPENAI_API_KEY or not OPENAI_BASE_URL:
     raise RuntimeError("Please set OPENAI_API_KEY and OPENAI_BASE_URL environment variables")
 
 client = OpenAI(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY)
-
-# ======================= 工具函数 =======================
-
-def extract_keys(json_line: str) -> tuple[str, str, str]:
-    """从JSONL行中提取question, ground_truth, data_source三个字段"""
-    json_data = json.loads(json_line)
-    return (
-        f"Question:{json_data['question']}",
-        f"Ground Truth:{json_data['ground_truth']}",
-        f"Data Source:{json_data['data_source']}"
-    )
 
 # ======================= 主流程 =======================
 

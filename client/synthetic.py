@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from client.prompt import QA_SYSTEM
+from utils import safe_json_loads, normalize, answer_matches, truncate
 
 import asyncio
 import json
@@ -22,6 +23,7 @@ from mcp.client.stdio import stdio_client
 
 # ======================= 配置 =======================
 # API 配置
+load_dotenv()
 OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # 可选，代理时使用
 CHAT_MODEL      = os.getenv("CHAT_MODEL", "gpt-4o")
@@ -49,51 +51,11 @@ VET_ATTEMPTS_PER_QA         = 8    # 校验次数（都失败才保留）
 OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", "reverse_qa_hard.jsonl")
 
 # ======================= 初始化 =======================
-load_dotenv()
-
 # 加载实体数据
 with open(ENTITY_SOURCE_FILE, "r") as f:
     for line in f:
         rec = json.loads(line)
         ENTITIES.append(rec["entity"])
-
-
-
-# ======================= 工具函数 =======================
-
-def safe_json_loads(s: str) -> Any:
-    """安全解析JSON字符串，支持容错处理"""
-    try:
-        return json.loads(s)
-    except Exception:
-        # 尝试修复常见的JSON格式问题
-        s2 = re.sub(r",\s*}", "}", s)
-        s2 = re.sub(r",\s*]", "]", s2)
-        try:
-            return json.loads(s2)
-        except Exception:
-            return None
-
-def normalize(s: str) -> str:
-    """标准化字符串：去除多余空格并转为小写"""
-    return re.sub(r"\s+", " ", (s or "").strip().lower())
-
-def answer_matches(pred: str, truth: str) -> bool:
-    """比较两个答案是否匹配（宽松匹配）"""
-    # 去除标点符号并标准化
-    p = normalize(re.sub(r"[^\w\s]", "", pred))
-    t = normalize(re.sub(r"[^\w\s]", "", truth))
-    
-    # 完全匹配或包含关系（长度大于3）
-    return p == t or (p in t and len(p) > 3) or (t in p and len(t) > 3)
-
-
-def truncate(s: str, max_len: int) -> str:
-    """截断字符串，保留首尾部分"""
-    if len(s) <= max_len:
-        return s
-    keep = max_len // 2
-    return s[:keep] + "\n[...SNIP...]\n" + s[-keep:]
 
 # ======================= LLM 封装 =======================
 
@@ -172,9 +134,9 @@ PAGE TITLE: {title}
 PAGE URL: {url}
 
 PAGE TEXT (truncated to {max_chars} chars):
-\"\"\"
+```
 {page_text}
-\"\"\"
+```
 
 Return JSON:
 {{
@@ -183,7 +145,6 @@ Return JSON:
   "evidence_quote": "contains the exact answer"
 }}
 """.strip()
-
 
 VET_SYSTEM = """
 You answer the user's question without tools. If unsure, say "I don't know". Output strict JSON only.
@@ -209,7 +170,6 @@ class QAPair:
     evidence_quote: str
     url: str
     title: str
-
 
 class HardQABuilder:
     def __init__(self, llm: LLM, bus: MCPBus):
@@ -353,7 +313,7 @@ class HardQABuilder:
             return None
 
         tried_urls: set[str] = set()
-        # 随机化：打乱结果，然后每轮从“最后一个”取（满足“随机爬最后网页”）
+        # 随机化：打乱结果，然后每轮从"最后一个"取（满足"随机爬最后网页"）
         pool = results[:]
         random.shuffle(pool)
 
@@ -382,7 +342,6 @@ class HardQABuilder:
             # 否则继续换页面
 
         return None
-
 
 async def main():
     if not OPENAI_API_KEY:
