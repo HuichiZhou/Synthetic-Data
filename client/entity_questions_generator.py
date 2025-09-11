@@ -5,65 +5,38 @@ import os
 from typing import List, Optional, Dict, Set, Any
 from openai import OpenAI
 from serpapi import Client
+from pathlib import Path
 
-# 实体类别定义
-ENTITY_CATEGORIES = [
-    # 人物类
-    "historical figures (specific individuals)",
-    "contemporary artists (specific people)",
-    "scientists with specific inventions",
-    "political leaders (specific individuals)",
-    # 艺术品/创作类
-    "Renaissance paintings (specific works)",
-    "novels by obscure authors",
-    "silent films (specific titles)",
-    "indie video games (specific titles)",
-    # 地理/建筑类
-    "ancient ruins (specific locations)",
-    "unique museums (specific institutions)",
-    "historical castles (specific structures)",
-    "unusual natural landmarks",
-    # 组织/团体类
-    "local sports teams (specific teams)",
-    "specialized universities (specific institutions)",
-    "independent music bands",
-    "historical secret societies",
-    
-    # 科技/发明类
-    "obsolete technological devices (specific models)",
-    "early computer programs (specific titles)",
-    "forgotten scientific instruments",
-    "patented but unused inventions",
-    
-    # 文化/传统类
-    "regional folk dances (specific styles)",
-    "ancient rituals (specific practices)",
-    "endangered languages (specific ones)",
-    "traditional crafts (specific techniques)",
-    
-    # 生物/自然类
-    "rare animal species (specific types)",
-    "endemic plant varieties (specific ones)",
-    "extinct prehistoric creatures",
-    "unique ecological communities",
-    
-    # 事件/现象类
-    "local historical events (specific occurrences)",
-    "seasonal natural phenomena (specific types)",
-    "obscure cultural festivals",
-    "forgotten scientific discoveries"
-]
+from client.prompt import ENTITY_CATEGORIES
+
+# ======================= 配置 =======================
+# API 配置
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+
+# 模型配置
+DEFAULT_MODEL = "gpt-4o"
+
+# 处理参数
+MAX_VALIDATION_ATTEMPTS = 5
+MAX_FEATURES = 8
+DEFAULT_ROUNDS = 10
+
+# 输出配置
+OUTPUT_FILE = "entity_questions.jsonl"
 
 class GPTEntityProcessor:
-    def __init__(self, api_key: str, serpapi_key: str, model: str = "gpt-4o"):
+    def __init__(self, api_key: str, serpapi_key: str, model: str = DEFAULT_MODEL):
         self.client = OpenAI(api_key=api_key)
         self.model = model
         self.serpapi_client = Client(api_key=serpapi_key)
+        
+        # 状态管理
         self.generated_entities: Set[str] = set()
-        self.max_validation_attempts = 5
         self.introduction_snippets: Set[str] = set()
         self.feature_search_info: str = ""
-        # token统计变量
+        
+        # Token 统计
         self.round_prompt_tokens = 0
         self.round_completion_tokens = 0
         self.round_total_tokens = 0

@@ -1,24 +1,6 @@
 from __future__ import annotations
 
-"""
-目的 / Goal
------------
-手动给定实体 -> 用 search 工具检索 -> 随机化后抓取“最后一个”网页 ->
-从页面生成一个较难的 QA -> 让同一个 LLM 直接作答 8 次做校验，
-如果 8 次都不通过（都答不对），则保留该 QA；否则继续换别的网页。
-
-依赖：
-- python-dotenv
-- openai>=1.30.0（异步客户端）
-- mcp (Model Context Protocol) 客户端 + 你的 stdio servers（serp_search.py, craw_page.py）
-
-假设工具签名：
-- serp_search(query: str, k: int) -> {"results": [{"title":"...","url":"...","snippet":"..."}, ...]}
-- craw_page(url: str, timeout_sec?: int) -> {"title":"...","text":"...","html"?:"..."}
-  （也支持直接返回 markdown/text 字符串的宽松情况）
-
-你可以按需调整工具名或字段名以匹配你本地的 server 实现。
-"""
+from client.prompt import QA_SYSTEM
 
 import asyncio
 import json
@@ -39,44 +21,52 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 # ======================= 配置 =======================
-load_dotenv()
-
+# API 配置
 OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # 可选，代理时使用
 CHAT_MODEL      = os.getenv("CHAT_MODEL", "gpt-4o")
 
+# 实体数据源配置
+ENTITY_SOURCE_FILE = "out/greek_cuisine.jsonl"
 ENTITIES = []
 
-with open("out/greek_cuisine.jsonl", "r") as f:
+# MCP 工具服务器配置
+SERVER_SCRIPTS = [
+    "../server/serp_search.py",
+    "../server/craw_page.py",
+]
+
+# 搜索与抓取配置
+RESULTS_PER_ENTITY = 50
+CRAWL_TIMEOUT_SEC  = 20
+MAX_PAGE_CHARS     = 100_000
+
+# 采样控制配置
+MAX_PAGES_TO_TRY_PER_ENTITY = 30   # 每个实体至多尝试多少不同网页
+VET_ATTEMPTS_PER_QA         = 8    # 校验次数（都失败才保留）
+
+# 输出配置
+OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", "reverse_qa_hard.jsonl")
+
+# ======================= 初始化 =======================
+load_dotenv()
+
+# 加载实体数据
+with open(ENTITY_SOURCE_FILE, "r") as f:
     for line in f:
         rec = json.loads(line)
         ENTITIES.append(rec["entity"])
 
 
-# MCP tool server 路径（按你的项目结构调整）
-SERVER_SCRIPTS: List[str] = [
-    "../server/serp_search.py",
-    "../server/craw_page.py",
-]
 
-# 搜索 / 抓取参数
-RESULTS_PER_ENTITY = 50
-CRAWL_TIMEOUT_SEC  = 20
-MAX_PAGE_CHARS     = 100_000
-
-# 采样控制
-MAX_PAGES_TO_TRY_PER_ENTITY = 30   # 每个实体至多尝试多少不同网页
-VET_ATTEMPTS_PER_QA         = 8    # 校验次数（都失败才保留）
-
-# 输出
-OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", "reverse_qa_hard.jsonl")
-
-# ======================= 小工具函数 =======================
+# ======================= 工具函数 =======================
 
 def safe_json_loads(s: str) -> Any:
+    """安全解析JSON字符串，支持容错处理"""
     try:
         return json.loads(s)
     except Exception:
+        # 尝试修复常见的JSON格式问题
         s2 = re.sub(r",\s*}", "}", s)
         s2 = re.sub(r",\s*]", "]", s2)
         try:
@@ -85,16 +75,21 @@ def safe_json_loads(s: str) -> Any:
             return None
 
 def normalize(s: str) -> str:
+    """标准化字符串：去除多余空格并转为小写"""
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 def answer_matches(pred: str, truth: str) -> bool:
-    # 宽松比对（忽略标点/大小写；包含关系放宽）
+    """比较两个答案是否匹配（宽松匹配）"""
+    # 去除标点符号并标准化
     p = normalize(re.sub(r"[^\w\s]", "", pred))
     t = normalize(re.sub(r"[^\w\s]", "", truth))
+    
+    # 完全匹配或包含关系（长度大于3）
     return p == t or (p in t and len(p) > 3) or (t in p and len(t) > 3)
 
 
 def truncate(s: str, max_len: int) -> str:
+    """截断字符串，保留首尾部分"""
     if len(s) <= max_len:
         return s
     keep = max_len // 2
@@ -170,18 +165,6 @@ class MCPBus:
             return msg.content
 
 # ======================= 提示词 =======================
-
-QA_SYSTEM = """
-You write one difficult, specific QA from a given page.
-Rules:
-- The question MUST mention the ENTITY and be answerable ONLY from the PAGE TEXT.
-- Prefer obscure, buried details (dates, catalog nos., minor participants, captions, footnotes).
-- The answer must be short (<= 10 words) and MUST be an exact span copied verbatim from the page.
-- Provide an evidence quote (short excerpt that contains the answer). 
-- The answer must be unique and unambiguous within the page.
-- In ALL cases, there must be only ONE correct answer, never multiple.
-- Output strict JSON only.
-""".strip()
 
 QA_USER_TMPL = """
 ENTITY: {entity}

@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-单次搜索 + 批量抓取 + LLM 正文抽取（支持中英 locale），并可选**只保留维基百科搜不到的实体**。
-
-- 只调用一次 serp_search，拿到一批 URL；
-- craw_page 批量抓取正文；
-- LLM 按页抽取实体（严格 JSON）；
-- 可选：用 site:wikipedia.org / zh.wikipedia.org 过滤维基可搜到的实体；
-- 不保存页面全文，只保存 {entity, why_uncommon, source_url, source_title, topic}。
-
-示例（英文数据集）：
-python synthetic_entity.py \
-  --topic "Chinese Cuisine" \
-  --server ../server/serp_search.py --server ../server/craw_page.py \
-  --k 25 --per-page 8 --model gpt-4o \
-  --locale en --only-nonwiki --out out/hc
-
-示例（中文数据集）：
-python synthetic_entity.py \
-  --topic "合成生物学" \
-  --server ../server/serp_search.py --server ../server/craw_page.py \
-  --k 25 --per-page 8 --model gpt-4o \
-  --locale zh --only-nonwiki --check-zh --out out/synbio_zh
-"""
-
 from __future__ import annotations
 
 import asyncio
