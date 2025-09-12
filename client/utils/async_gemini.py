@@ -1,8 +1,3 @@
-"""
-优化的异步Gemini客户端工具
-提供高性能的异步Gemini API调用，支持批量处理、错误重试和并发控制
-"""
-
 import asyncio
 import json
 import os
@@ -38,7 +33,7 @@ class AsyncGeminiClient:
         base_url: Optional[str] = None,
         model: str = "gemini-2.5-pro",
         max_concurrent: int = 10,
-        timeout: int = 30,
+        # timeout: int = 30,
         max_retries: int = 3
     ):
         """
@@ -56,7 +51,7 @@ class AsyncGeminiClient:
         self.base_url = base_url or os.getenv("GENAI_API_BASE_URL")
         self.model = model
         self.max_concurrent = max_concurrent
-        self.timeout = timeout
+        # self.timeout = timeout
         self.max_retries = max_retries
         
         if not self.api_key:
@@ -67,7 +62,7 @@ class AsyncGeminiClient:
             api_key=self.api_key,
             http_options=types.HttpOptions(
                 base_url=self.base_url,
-                timeout=self.timeout * 1000  # 转换为毫秒
+                # timeout=self.timeout * 1000  # 转换为毫秒
             )
         )
         
@@ -75,13 +70,13 @@ class AsyncGeminiClient:
         self.semaphore = asyncio.Semaphore(max_concurrent)
         
         # 默认配置
-        self.default_config = GenerateContentConfig(
-            tools=[Tool(google_search=GoogleSearch())],
-            temperature=0.7,
-            max_output_tokens=2048,
-            top_p=0.95,
-            top_k=40
-        )
+        # self.default_config = GenerateContentConfig(
+        #     tools=[Tool(google_search=GoogleSearch())],
+        #     temperature=0.7,
+        #     max_output_tokens=2048,
+        #     top_p=0.95,
+        #     top_k=40
+        # )
 
     @retry(
         stop=stop_after_attempt(3),
@@ -92,29 +87,28 @@ class AsyncGeminiClient:
         self,
         prompt: str,
         system_instruction: Optional[str] = None,
-        config_override: Optional[Dict] = None
-    ) -> str:
+        config_override: Any = None,
+        extract_full_data: bool = True
+    ) -> Union[str, Dict[str, Any]]:
         """
-        异步生成单个响应
+        异步生成单个响应，支持完整数据提取
         
         Args:
             prompt: 用户提示词
             system_instruction: 系统提示词
             config_override: 配置覆盖参数
+            extract_full_data: 是否提取完整数据（包括metadata）
             
         Returns:
-            生成的文本内容
+            生成的文本内容或完整数据字典
         """
         async with self.semaphore:
             try:
-                config = self.default_config.copy()
-                
                 if system_instruction:
+                    config = types.GenerateContentConfig()
                     config.system_instruction = system_instruction
-                
                 if config_override:
-                    for key, value in config_override.items():
-                        setattr(config, key, value)
+                    config = config_override
                 
                 response = await asyncio.get_event_loop().run_in_executor(
                     None,
@@ -125,17 +119,167 @@ class AsyncGeminiClient:
                     )
                 )
                 
-                return getattr(response, "text", "")
+                if extract_full_data:
+                    return self._extract_comprehensive_data(response)
+                else:
+                    return self._extract_text_content(response)
                 
             except Exception as e:
                 logger.error(f"生成失败: {e}")
                 raise
 
+    def _extract_comprehensive_data(self, response) -> Dict[str, Any]:
+        """
+        从Gemini响应中提取完整数据，包括所有部分和元数据
+        
+        Args:
+            response: Gemini响应对象
+            
+        Returns:
+            包含所有提取数据的字典
+        """
+        result = {
+            "text": "",
+            "code": "",
+            "code_execution_result": "",
+            "search_results": [],
+            "grounding_metadata": {},
+            "citations": [],
+            "safety_ratings": [],
+            "raw_response": str(response)
+        }
+        
+        try:
+            if not response.candidates or not response.candidates[0].content:
+                return result
+                
+            candidate = response.candidates[0]
+            content = candidate.content
+            
+            # 提取内容部分
+            for part in content.parts:
+                if hasattr(part, 'text') and part.text:
+                    result["text"] += part.text
+                elif hasattr(part, 'executable_code') and part.executable_code:
+                    result["code"] = part.executable_code.code
+                elif hasattr(part, 'code_execution_result') and part.code_execution_result:
+                    result["code_execution_result"] = part.code_execution_result.output
+                elif hasattr(part, 'function_call'):
+                    result["function_calls"] = str(part.function_call)
+                elif hasattr(part, 'file_data'):
+                    result["file_data"] = str(part.file_data)
+                else:
+                    result["unknown_parts"] = str(part)
+            
+            # 提取grounding metadata
+            if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                metadata = candidate.grounding_metadata
+                grounding_data = {}
+                
+                # 提取grounding chunks
+                if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                    grounding_data['chunks'] = []
+                    for chunk in metadata.grounding_chunks:
+                        grounding_data['chunks'].append(dict(chunk.web))
+                
+                # 提取grounding supports
+                if hasattr(metadata, 'grounding_supports') and metadata.grounding_supports:
+                    grounding_data['supports'] = []
+                    for support in metadata.grounding_supports:
+                        grounding_data['supports'].append({"segment": dict(support.segment), "groundingChunkIndices": list(support.grounding_chunk_indices)})
+                
+                if hasattr(metadata, 'web_search_queries') and metadata.web_search_queries:
+                    grounding_data['web_search_queries'] = list(metadata.web_search_queries)
+                
+                if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+                    grounding_data['search_entry_point'] = str(metadata.search_entry_point)
+                
+                if hasattr(metadata, 'retrieval_queries') and metadata.retrieval_queries:
+                    grounding_data['retrieval_queries'] = list(metadata.retrieval_queries)
+                
+                # if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+                #     grounding_data['search_entry_point'] = dict(metadata.search_entry_point)
+                
+                result["grounding_metadata"] = grounding_data
+            
+            # 提取search entry point
+            if hasattr(metadata, 'search_entry_point'):
+                # search_point = candidate.search_entry_point
+                # search_data = {}
+                # if hasattr(search_point, 'rendered_content'):
+                #     search_data['rendered_content'] = search_point.rendered_content
+                # if hasattr(search_point, 'sdk_blob'):
+                #     search_data['sdk_blob'] = str(search_point.sdk_blob)
+                result["search_entry_point"] = dict(metadata.search_entry_point)
+            
+            # 提取citations
+            if hasattr(candidate, 'citation_metadata') and candidate.citation_metadata:
+                result["citations"] = []
+                for citation in candidate.citation_metadata.citation_sources:
+                    # citation_data = {}
+                    # if hasattr(citation, 'start_index'):
+                    #     citation_data['start_index'] = citation.start_index
+                    # if hasattr(citation, 'end_index'):
+                    #     citation_data['end_index'] = citation.end_index
+                    # if hasattr(citation, 'uri'):
+                    #     citation_data['uri'] = citation.uri
+                    # if hasattr(citation, 'title'):
+                    #     citation_data['title'] = citation.title
+                    # if hasattr(citation, 'license'):
+                    #     citation_data['license'] = citation.license
+                    result["citations"].append(dict(citation))
+            
+            # 提取安全评级
+            if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                # result["safety_ratings"] = []
+                # for rating in candidate.safety_ratings:
+                #     rating_data = {}
+                #     if hasattr(rating, 'category'):
+                #         rating_data['category'] = str(rating.category)
+                #     if hasattr(rating, 'probability'):
+                #         rating_data['probability'] = str(rating.probability)
+                #     if hasattr(rating, 'severity'):
+                #         rating_data['severity'] = str(rating.severity)
+                #     if hasattr(rating, 'blocked'):
+                #         rating_data['blocked'] = rating.blocked
+                    result["safety_ratings"].append(dict(candidate.safety_ratings))
+                
+        except Exception as e:
+            logger.error(f"数据提取失败: {e}")
+            result["extraction_error"] = str(e)
+        
+        return result
+
+    def _extract_text_content(self, response) -> str:
+        """
+        提取纯文本内容
+        
+        Args:
+            response: Gemini响应对象
+            
+        Returns:
+            提取的文本内容
+        """
+        try:
+            if not response.candidates or not response.candidates[0].content:
+                return ""
+                
+            text_parts = []
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text') and part.text:
+                    text_parts.append(part.text)
+            
+            return "\n".join(text_parts)
+            
+        except Exception as e:
+            logger.error(f"文本提取失败: {e}")
+            return str(response) if hasattr(response, '__str__') else ""
+
     async def generate_batch(
         self,
         prompts: List[str],
         system_instruction: Optional[str] = None,
-        config_override: Optional[Dict] = None,
+        config_override: Any = None,
         show_progress: bool = True
     ) -> List[str]:
         """
@@ -359,17 +503,18 @@ async def example_usage():
     client = AsyncGeminiClient(max_concurrent=5)
     
     # 示例1: 单个生成
-    response = await client.generate_single(
-        "请解释什么是量子纠缠",
-        system_instruction="你是一个物理学专家"
-    )
-    print("单个响应:", response[:100] + "...")
+    # response = await client.generate_single(
+    #     "请解释什么是量子纠缠",
+    #     system_instruction="你是一个物理学专家"
+    # )
+    # print("单个响应:", response)
     
     # 示例2: 批量生成
-    concepts = ["机器学习", "区块链", "神经网络"]
+    concepts = ["policy", "neural network", "quantum computing", "climate change"]
     responses = await client.generate_batch(
-        [f"请解释什么是{c}" for c in concepts],
-        system_instruction="用简洁的语言解释"
+        [f"search the newest news about {c}" for c in concepts],
+        config_override=types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
+        # config_override=types.GenerateContentConfig(tools=[types.Tool(code_execution=types.ToolCodeExecution())]),
     )
     for concept, resp in zip(concepts, responses):
         print(f"{concept}: {resp[:50]}...")
