@@ -13,6 +13,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from google.genai import types
 
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
@@ -199,7 +200,8 @@ class HardQABuilder:
 
     async def crawl(self, url: str) -> Tuple[str, str]:
         # res = await self.bus.call("crawl_page", {"url": url})
-        res = await crawl_page(url)  # 直接调用函数，避免多次进程通信开销
+        # res = await crawl_page(url)  # 直接调用函数，避免多次进程通信开销
+        res = await self.gemini_client.generate_single(f"Visit the website and extract all content from it, summarize the content of this URL in one sentence and output that sentence on the first line, and output the entire context in Markdown format :{url}", config_override=types.GenerateContentConfig(tools=[{"url_context": {}}]))
         # 容错：可能直接是字符串，或是 dict
         if isinstance(res, str):
             title = url.rsplit("/", 1)[-1]

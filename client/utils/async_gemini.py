@@ -139,14 +139,18 @@ class AsyncGeminiClient:
             包含所有提取数据的字典
         """
         result = {
-            "text": "",
-            "code": "",
-            "code_execution_result": "",
+            "text": [],
+            "code": [],
+            "code_execution_result": [],
+            "function_calls": [],
+            "file_data": [],
             "search_results": [],
             "grounding_metadata": {},
             "citations": [],
             "safety_ratings": [],
-            "raw_response": str(response)
+            "url_context_metadata": {},
+            "unknown_parts": [],
+            "raw_response": response
         }
         
         try:
@@ -159,17 +163,17 @@ class AsyncGeminiClient:
             # 提取内容部分
             for part in content.parts:
                 if hasattr(part, 'text') and part.text:
-                    result["text"] += part.text
+                    result["text"].append(part.text)
                 elif hasattr(part, 'executable_code') and part.executable_code:
-                    result["code"] = part.executable_code.code
+                    result["code"].append(part.executable_code.code)
                 elif hasattr(part, 'code_execution_result') and part.code_execution_result:
-                    result["code_execution_result"] = part.code_execution_result.output
+                    result["code_execution_result"].append(part.code_execution_result.output)
                 elif hasattr(part, 'function_call'):
-                    result["function_calls"] = str(part.function_call)
+                    result["function_calls"].append(str(part.function_call))
                 elif hasattr(part, 'file_data'):
-                    result["file_data"] = str(part.file_data)
+                    result["file_data"].append(str(part.file_data))
                 else:
-                    result["unknown_parts"] = str(part)
+                    result["unknown_parts"].append(str(part))
             
             # 提取grounding metadata
             if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
@@ -203,7 +207,7 @@ class AsyncGeminiClient:
                 result["grounding_metadata"] = grounding_data
             
             # 提取search entry point
-            if hasattr(metadata, 'search_entry_point'):
+            if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
                 # search_point = candidate.search_entry_point
                 # search_data = {}
                 # if hasattr(search_point, 'rendered_content'):
@@ -243,8 +247,14 @@ class AsyncGeminiClient:
                 #     if hasattr(rating, 'blocked'):
                 #         rating_data['blocked'] = rating.blocked
                     result["safety_ratings"].append(dict(candidate.safety_ratings))
+
+            # 提取URL上下文元数据
+            if hasattr(candidate, 'url_context_metadata') and candidate.url_context_metadata:
+                result["url_context_metadata"] = dict(candidate.url_context_metadata)
                 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             logger.error(f"数据提取失败: {e}")
             result["extraction_error"] = str(e)
         
