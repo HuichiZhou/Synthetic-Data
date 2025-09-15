@@ -13,7 +13,7 @@ Dependencies
 # --------------------------------------------------------------------------- #
 
 from mcp.server.fastmcp import FastMCP
-from crawl4ai import AsyncWebCrawler
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig, DefaultMarkdownGenerator, PruningContentFilter
 
 # --------------------------------------------------------------------------- #
 #  FastMCP server instance
@@ -58,9 +58,22 @@ async def crawl_page(url: str) -> str:
             (due to network errors, access restrictions, or page layout
             issues), a plain-text error message is returned instead.
     """
+    browser_config = BrowserConfig(
+        headless=True,  
+        verbose=True,
+    )
+    run_config = CrawlerRunConfig(
+        cache_mode=CacheMode.ENABLED,
+        markdown_generator=DefaultMarkdownGenerator(
+            content_filter=PruningContentFilter(threshold=0.48, threshold_type="fixed", min_word_threshold=0)
+        ),
+        # markdown_generator=DefaultMarkdownGenerator(
+        #     content_filter=BM25ContentFilter(user_query="WHEN_WE_FOCUS_BASED_ON_A_USER_QUERY", bm25_threshold=1.0)
+        # ),
+    )
     try:
-        async with AsyncWebCrawler() as crawler:
-            result = await crawler.arun(url=url)
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            result = await crawler.arun(url=url, config=run_config)
             return result.markdown
     except Exception as exc:
         return f"⚠️ Crawl error: {exc!s}"

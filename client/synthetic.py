@@ -1,6 +1,8 @@
 from __future__ import annotations
 import sys
 
+from utils.async_gemini import AsyncGeminiClient
+from utils.webpage import crawl_page, google_search
 from prompt import QA_SYSTEM, QA_USER_TMPL, VET_SYSTEM, VET_USER_TMPL
 from utils import safe_json_loads, normalize, answer_matches, truncate
 
@@ -34,8 +36,8 @@ ENTITIES = []
 
 # MCP 工具服务器配置
 SERVER_SCRIPTS = [
-    "../mcp/serp_search.py",
-    "../mcp/craw_page.py",
+    "./mcp/serp_search.py",
+    # "./mcp/craw_page.py",
 ]
 
 # 搜索与抓取配置
@@ -56,6 +58,8 @@ OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", "result/reverse_qa_hard.jsonl")
 #     for line in f:
 #         rec = json.loads(line)
 #         ENTITIES.append(rec["entity"])
+
+
 ENTITIES = [
     "Vegan fasting dessert recipe",
     "Greek Easter bread",
@@ -109,53 +113,6 @@ class LLM:
         )
         return resp.choices[0].message.content or ""
 
-
-# ======================= MCP Tool Bus =======================
-
-
-class MCPBus:
-    """连接到 stdio servers，并通过 call(tool_name, args) 调用工具。"""
-
-    def __init__(self, server_scripts: List[str]):
-        self.server_scripts = server_scripts
-        self.sessions: Dict[str, ClientSession] = {}
-        self.exit_stack = AsyncExitStack()
-
-    async def __aenter__(self):
-        for script in self.server_scripts:
-            params = StdioServerParameters(
-                command=(sys.executable if script.endswith(".py") else "node"), args=[script]
-            )
-            stdio, write = await self.exit_stack.enter_async_context(
-                stdio_client(params)
-            )
-            session = await self.exit_stack.enter_async_context(
-                ClientSession(stdio, write)
-            )
-            await session.initialize()
-            tools = await session.list_tools()
-            for t in tools.tools:
-                # 用工具名注册，如 'serp_search', 'craw_page'
-                self.sessions[t.name] = session
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.exit_stack.aclose()
-
-    async def call(self, tool_name: str, args: Dict[str, Any]) -> Any:
-        if tool_name not in self.sessions:
-            raise RuntimeError(f"Tool not registered: {tool_name}")
-        session = self.sessions[tool_name]
-        msg = await session.call_tool(tool_name, args)
-        # server 可能直接返回结构化文本/JSON 字符串
-        try:
-            result = json.loads(str(msg.content))
-            print(f"[DEBUG] {tool_name} returned parsed JSON: {type(result)}")
-            return result
-        except Exception as e:
-            print(f"[DEBUG] {tool_name} returned raw content: {type(msg.content)}")
-            return msg.content
-        
 # ======================= 核心流程 =======================
 
 
@@ -170,14 +127,16 @@ class QAPair:
 
 
 class HardQABuilder:
-    def __init__(self, llm: LLM, bus: MCPBus):
+    def __init__(self, llm: LLM, bus, gemini_client: Any = None):
         self.llm = llm
         self.bus = bus
+        self.gemini_client = gemini_client
 
     async def search(self, entity: str, k: int) -> List[Tuple[str, str]]:
         # 过滤掉常见百科域，避免太容易
         q = f'"{entity}" -site:wikipedia.org -site:wikipedia.org -site:wikidata.org -site:britannica.com'
-        res = await self.bus.call("google_search", {"query": q, "topk": k})
+        # res = await self.bus.call("google_search", {"query": q, "topk": k})
+        res = await google_search(q, topk=k)  # 直接调用函数，避免多次进程通信开销
 
         # 处理不同类型的返回值
         items = []
@@ -239,7 +198,8 @@ class HardQABuilder:
         return out
 
     async def crawl(self, url: str) -> Tuple[str, str]:
-        res = await self.bus.call("crawl_page", {"url": url})
+        # res = await self.bus.call("crawl_page", {"url": url})
+        res = await crawl_page(url)  # 直接调用函数，避免多次进程通信开销
         # 容错：可能直接是字符串，或是 dict
         if isinstance(res, str):
             title = url.rsplit("/", 1)[-1]
@@ -367,41 +327,41 @@ async def main():
     llm = LLM(CHAT_MODEL, OPENAI_API_KEY, OPENAI_BASE_URL)
 
     try:
-        async with MCPBus(SERVER_SCRIPTS) as bus:
-            builder = HardQABuilder(llm, bus)
+        # async with MCPBus(SERVER_SCRIPTS) as bus:
+        builder = HardQABuilder(llm, None, AsyncGeminiClient(max_concurrent=5))
 
-            out_path = Path(OUTPUT_JSONL)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path = Path(OUTPUT_JSONL)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
 
-            print(f"Starting generation with {len(ENTITIES)} entities...")
-            kept = 0
+        print(f"Starting generation with {len(ENTITIES)} entities...")
+        kept = 0
 
-            with out_path.open("w", encoding="utf-8") as f:
-                for i, entity in enumerate(ENTITIES, 1):
-                    print(f"\n[{i}/{len(ENTITIES)}] Processing: {entity}")
+        with out_path.open("w", encoding="utf-8") as f:
+            for i, entity in enumerate(ENTITIES, 1):
+                print(f"\n[{i}/{len(ENTITIES)}] Processing: {entity}")
 
-                    try:
-                        qa = await builder.find_one_hard_qa_for_entity(entity)
-                        if qa:
-                            record = {
-                                "entity": qa.entity,
-                                "question": qa.question,
-                                "answer": qa.answer,
-                                "evidence_quote": qa.evidence_quote,
-                                "url": qa.url,
-                                "title": qa.title,
-                            }
-                            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                            f.flush()  # 确保数据被写入
-                            kept += 1
-                            print(f"  ✓ Kept difficult QA (total: {kept})")
-                        else:
-                            print(f"  ✗ No suitable QA found")
-                    except Exception as e:
-                        print(f"  ✗ Error processing {entity}: {e}")
-                        continue  # 继续处理下一个实体
+                try:
+                    qa = await builder.find_one_hard_qa_for_entity(entity)
+                    if qa:
+                        record = {
+                            "entity": qa.entity,
+                            "question": qa.question,
+                            "answer": qa.answer,
+                            "evidence_quote": qa.evidence_quote,
+                            "url": qa.url,
+                            "title": qa.title,
+                        }
+                        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                        f.flush()  # 确保数据被写入
+                        kept += 1
+                        print(f"  ✓ Kept difficult QA (total: {kept})")
+                    else:
+                        print(f"  ✗ No suitable QA found")
+                except Exception as e:
+                    print(f"  ✗ Error processing {entity}: {e}")
+                    continue  # 继续处理下一个实体
 
-            print(f"\nDone. Kept {kept} QA(s). Output -> {out_path.resolve()}")
+        print(f"\nDone. Kept {kept} QA(s). Output -> {out_path.resolve()}")
 
     except KeyboardInterrupt:
         print("\n⚠️ Process interrupted by user")
@@ -409,7 +369,6 @@ async def main():
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")
         raise
-
 
 if __name__ == "__main__":
     try:
