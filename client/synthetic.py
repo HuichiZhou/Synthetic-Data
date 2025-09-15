@@ -207,8 +207,8 @@ class HardQABuilder:
             title = url.rsplit("/", 1)[-1]
             text = res
         elif isinstance(res, dict):
-            title = res.get("title") or url.rsplit("/", 1)[-1]
-            text = res.get("raw") or res.get("text") or str(res) or ""
+            title = res['text'][-1].split("\n")[0]
+            text = res['text'][-1]
         elif hasattr(res, "text"):  # 处理 TextContent 对象
             try:
                 content_text = res.text

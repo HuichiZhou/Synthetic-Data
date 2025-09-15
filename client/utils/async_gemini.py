@@ -217,21 +217,21 @@ class AsyncGeminiClient:
                 result["search_entry_point"] = dict(metadata.search_entry_point)
             
             # 提取citations
-            if hasattr(candidate, 'citation_metadata') and candidate.citation_metadata:
-                result["citations"] = []
-                for citation in candidate.citation_metadata.citation_sources:
-                    # citation_data = {}
-                    # if hasattr(citation, 'start_index'):
-                    #     citation_data['start_index'] = citation.start_index
-                    # if hasattr(citation, 'end_index'):
-                    #     citation_data['end_index'] = citation.end_index
-                    # if hasattr(citation, 'uri'):
-                    #     citation_data['uri'] = citation.uri
-                    # if hasattr(citation, 'title'):
-                    #     citation_data['title'] = citation.title
-                    # if hasattr(citation, 'license'):
-                    #     citation_data['license'] = citation.license
-                    result["citations"].append(dict(citation))
+            # if hasattr(candidate, 'citation_metadata') and candidate.citation_metadata:
+            #     result["citations"] = []
+            #     for citation in candidate.citation_metadata.citation_sources:
+            #         # citation_data = {}
+            #         # if hasattr(citation, 'start_index'):
+            #         #     citation_data['start_index'] = citation.start_index
+            #         # if hasattr(citation, 'end_index'):
+            #         #     citation_data['end_index'] = citation.end_index
+            #         # if hasattr(citation, 'uri'):
+            #         #     citation_data['uri'] = citation.uri
+            #         # if hasattr(citation, 'title'):
+            #         #     citation_data['title'] = citation.title
+            #         # if hasattr(citation, 'license'):
+            #         #     citation_data['license'] = citation.license
+            #         result["citations"].append(dict(citation))
             
             # 提取安全评级
             if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
