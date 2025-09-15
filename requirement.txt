@@ -1,0 +1,5 @@
+google-search-results
+colorlog
+tenacity
+crawl4ai
+genai

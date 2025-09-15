@@ -8,16 +8,14 @@ from openai import OpenAI
 from serpapi import Client
 from pathlib import Path
 
-from client.prompt import ENTITY_CATEGORIES
+from prompt import ENTITY_CATEGORIES
 
-# ======================= 配置 =======================
-# API 配置
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+# 目标：生成冷门实体的问答对
+# 生成实体 → 提取特征 → 组合描述 → 生成问题
+# 输出：实体名称问题（"这个实体是什么？"类型）
 
 # 模型配置
-DEFAULT_MODEL = "gpt-4o"
+DEFAULT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o")
 
 # 处理参数
 MAX_VALIDATION_ATTEMPTS = 5
@@ -25,11 +23,11 @@ MAX_FEATURES = 8
 DEFAULT_ROUNDS = 10
 
 # 输出配置
-OUTPUT_FILE = "entity_questions.jsonl"
+OUTPUT_FILE = "result/entity_questions_generator_result.jsonl"
 
 class GPTEntityProcessor:
     def __init__(self, api_key: str, serpapi_key: str, model: str = DEFAULT_MODEL):
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url=os.getenv("OPENAI_BASE_URL"))
         self.model = model
         self.serpapi_client = Client(api_key=serpapi_key)
         
@@ -37,6 +35,7 @@ class GPTEntityProcessor:
         self.generated_entities: Set[str] = set()
         self.introduction_snippets: Set[str] = set()
         self.feature_search_info: str = ""
+        self.max_validation_attempts = MAX_VALIDATION_ATTEMPTS
         
         # Token 统计
         self.round_prompt_tokens = 0
@@ -284,6 +283,7 @@ class GPTEntityProcessor:
         return ""
 
 def main(num_rounds: int = 10, output_file: str = "entity_questions.jsonl"):
+    load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     serpapi_key = os.getenv("SERPAPI_KEY")
     
