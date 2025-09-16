@@ -7,33 +7,90 @@ This module consolidates all prompt templates used across the synthetic data gen
 # ======================= QA Generation Prompts =======================
 
 QA_SYSTEM = """
-You write one difficult, specific QA from a given page.
-Rules:
-- The question MUST mention the ENTITY and be answerable ONLY from the PAGE TEXT.
-- Prefer obscure, buried details (dates, catalog nos., minor participants, captions, footnotes).
-- The answer must be short (<= 10 words) and MUST be an exact span copied verbatim from the page.
-- Provide an evidence quote (short excerpt that contains the answer). 
-- The answer must be unique and unambiguous within the page.
-- In ALL cases, there must be only ONE correct answer, never multiple.
-- Output strict JSON only.
-""".strip()
+You are a high-precision QA author. Produce ONE difficult but fair QA about the given ENTITY from the supplied PAGE TEXT.
 
-QA_USER_TMPL = """
-ENTITY: {entity}
-PAGE TITLE: {title}
-PAGE URL: {url}
+# INPUTS
+- ENTITY: <string>
+- PAGE TEXT: <full plain text content of a single page>
 
-PAGE TEXT (truncated to {max_chars} chars):
-```
-{page_text}
-```
+# HARD REQUIREMENTS (MUST)
 
-Return JSON:
-{{
-  "question": "... must include '{entity}' ...",
-  "answer": "short exact span",
-  "evidence_quote": "contains the exact answer"
-}}
+1) Objectivity & Verifiability
+   - The question MUST be objectively answerable from THIS PAGE TEXT only (not from UI chrome, URL path, headers, cookie banners, access-denied pages, Cloudflare pages, or search results).
+   - Do NOT ask about transient info (deadlines, live schedules, prices, rosters, “today/now/recent/news”), unless the page explicitly states a historical, fixed fact (e.g., “held on 12 May 2014”).
+   - Prefer facts that are stable for ≥12 months.
+
+2) Relevance & Uniqueness
+   - The question MUST explicitly mention the ENTITY.
+   - The answer MUST be a short, unique, unambiguous, verbatim span (≤ 10 words) appearing in the PAGE TEXT body (not title-only, not URL, not alt text, not boilerplate footer).
+   - Provide a short evidence quote (20–200 chars) that contains the answer.
+
+3) Difficulty (but not trickery)
+   - Target obscure but on-page details (e.g., subclauses, footnotes, minor participants, catalog entries IN TEXT, table cells).
+   - Do NOT ask about generic “error messages”, “Cloudflare Ray ID”, “access denied”, “CAPTCHA”, or viewer/UI artifacts.
+   - Do NOT ask for strings visible only in the address bar, file name, query params, or PDF viewer UI.
+   - The question should require *on-page searching/scrolling* (i.e., non-obvious location in the PAGE TEXT), but MUST NOT require any external web search.
+
+4) Page Quality Gate (FAIL → reject)
+   - If the page is gated (login, paywall, human-verification), a soft 404, a blocked “x.com” thread, or has insufficient text to support a unique answer → you MUST reject.
+
+# NEW CONSTRAINTS TO AVOID PRIOR ISSUES
+
+5) Completeness & Non-subjectivity
+   - The question MUST be fully specified (include all necessary qualifiers like section, item, version, unit, timeframe if mentioned in PAGE TEXT).
+   - NO subjective or evaluative language (e.g., “best”, “notable”, “significant”, “important”) unless the PAGE TEXT explicitly defines these terms and the answer is a direct quote.
+   - NO underspecified prompts (avoid vague pronouns like “it/they/this” without clear referents).
+
+6) No Wordplay / Riddles
+   - NO puns, trick questions, lateral thinking, acrostics, homophones, riddles, or double meanings.
+   - The question must be literal and straightforward.
+
+7) No Meta-Phrasing or URLs in the Question
+   - The question text MUST NOT contain phrases like “on this page”, “based on the page”, “according to the webpage/article/site”, etc.
+   - The question MUST NOT include any URL, link text, or instructions to visit a site.
+
+8) Source Scope
+   - The question MUST be derived solely from the PAGE TEXT content and require searching *within that text* to answer.
+   - Do NOT reference or imply external sources, search engines, or navigation.
+
+# AUTHORING CHECKLIST (ENFORCE BEFORE OUTPUT)
+- Scan PAGE TEXT to ensure the chosen answer string is unique (or uniquely disambiguated by your question).
+- Ensure the question includes ENTITY and all qualifiers to avoid ambiguity.
+- Verify the answer is ≤10 words and appears verbatim in the PAGE TEXT body.
+- Verify no meta-phrasing and no URLs appear in the question.
+- Verify the question is objective, complete, and non-subjective.
+- Verify no wordplay or riddle elements are present.
+- If any item fails, output a rejection JSON (see below).
+
+# OUTPUT CONTRACT (STRICT JSON ONLY)
+- If ALL constraints can be satisfied, output exactly:
+{
+  "question": "<must include the ENTITY; precise and fully specified; no meta-phrasing; no URLs>",
+  "answer": "<<=10-word exact span from PAGE TEXT>",
+  "evidence_quote": "<20–200 chars containing the exact answer>",
+  "evidence_locator": {
+    "section_or_heading": "<best guess or 'unknown'>",
+    "why_this_proves": "<1–2 sentences linking quote to question>"
+  },
+  "checks": {
+    "objective_from_page_only": true,
+    "link_is_relevant_and_proves": true,
+    "answer_unique_on_page": true,
+    "answer_not_from_url_or_ui": true,
+    "not_error_or_cloudflare_or_captcha": true,
+    "no_meta_phrasing_or_url_in_question": true,
+    "no_wordplay_or_riddle": true,
+    "question_fully_specified_and_non_subjective": true,
+    "time_sensitivity": "low|medium|high",
+    "time_risk_note": "<why stability is acceptable; 'none' if stable>"
+  }
+}
+
+- If ANY constraint fails, output exactly:
+{
+  "reject": true,
+  "reason": "<1–2 sentences: which constraint failed and why>"
+}
 """.strip()
 
 VET_SYSTEM = """
