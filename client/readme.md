@@ -1,4 +1,4 @@
-# Synthetic Data Generation Client
+# 合成数据生成客户端
 
 本客户端提供多种合成数据生成工具，用于创建高质量的问答对和实体数据。
 
@@ -6,148 +6,225 @@
 
 ```
 client/
-├── synthetic.py              # 主合成数据生成器（基于现有实体生成困难QA）
-├── synthetic_entity.py        # 实体抽取器（从网页内容抽取冷门实体）
-├── inject_fuzz_gpt5.py       # GPT-5 搜索注入工具
-├── inject_fuzz_gemini.py     # Gemini 搜索注入工具
-├── entity_questions_generator.py  # 实体问题生成器
-├── prompt.py                 # 提示词模板
-└── readme.md                # 说明文档
+├── prompt.py                 # 统一的提示词模板
+├── basicqa_generator.py      # 基础问答生成器
+├── basicqa_generator_huichi.py  # 辉池写的基础问答生成器
+├── browsercamp_gemini.py     # Gemini生成browsercamp
+├── browsercamp_oai.py        # OpenAI生成browsercamp
+├── entity_generator.py       # 实体生成器
+├── entity_generator_huichi.py  # 辉池写的实体生成器
+└── utils/                    # 工具模块
 ```
 
-## 🛠️ 工具说明
+## 🛠️ 工具详细说明
 
-### 1. synthetic.py - 主合成数据生成器
+### 1. basicqa_generator.py - 基础问答生成器
 
-**目的**: 基于现有实体生成困难的问答对
+**目的**: 生成冷门实体的问答对，通过特征提取和验证确保数据质量
 
+**输入**:
+- 预定义的实体类别（prompt.py中的ENTITY_CATEGORIES）
+- OpenAI API密钥
+- SerpAPI密钥用于实体验证
+
+**输出**:
+- JSONL格式的问答对文件（result/entity_questions_generator_result.jsonl）
+- 每个条目包含实体、问题、答案和验证信息
+
+**处理流程**:
+1. 从预定义类别中随机选择实体
+2. 提取实体特征并进行唯一性检查
+3. 使用SerpAPI验证实体存在性
+4. 生成自然语言描述和问题
+5. 多轮验证确保数据质量
+
+**Mermaid流程图**:
+```mermaid
+flowchart TD
+    A[开始] --> B[选择随机实体类别]
+    B --> C[提取实体特征]
+    C --> D[SerpAPI验证存在性]
+    D --> E{验证通过?}
+    E -->|否| C
+    E -->|是| F[生成自然语言描述]
+    F --> G[创建问答对]
+    G --> H[多轮质量验证]
+    H --> I{验证通过?}
+    I -->|否| G
+    I -->|是| J[保存到JSONL文件]
+    J --> K[完成]
 ```
-手动给定实体 -> 搜索工具检索 -> 随机化后抓取"最后一个"网页 ->
-从页面生成较难QA -> 让同一个LLM直接作答8次做校验 ->
-如果8次都不通过（都答不对），则保留该QA；否则继续换别的网页
+
+### 2. entity_generator.py - 实体生成器
+
+**目的**: 使用多维指令模板批量生成多样化合成实体数据
+
+**输入**:
+- 预定义的指令维度（学科、方法论、地理范围等）
+- Gemini API配置
+- 生成样本数量配置
+
+**输出**:
+- JSONL格式的生成实体（result/generated_entities.jsonl）
+- 每个条目包含指令模板和Gemini响应
+
+**处理流程**:
+1. 从多个维度生成随机组合
+2. 构建完整的指令模板
+3. 使用Gemini API批量生成内容
+4. 保存结果到JSONL文件
+
+**Mermaid流程图**:
+```mermaid
+flowchart TD
+    A[开始] --> B[加载指令维度配置]
+    B --> C[生成随机组合]
+    C --> D[构建指令模板]
+    D --> E[批量调用Gemini API]
+    E --> F[处理生成结果]
+    F --> G[保存到JSONL文件]
+    G --> H[完成]
 ```
 
-**依赖**:
-- python-dotenv
-- openai>=1.30.0（异步客户端）
-- mcp (Model Context Protocol) 客户端 + stdio servers（serp_search.py, craw_page.py）
+### 3. browsercamp_gemini.py - Gemini浏览器竞赛生成
 
-**工具签名**:
-- `serp_search(query: str, k: int) -> {"results": [{"title":"...","url":"...","snippet":"..."}, ...]}`
-- `craw_page(url: str, timeout_sec?: int) -> {"title":"...","text":"...","html":"..."}`
+**目的**: 使用Gemini处理问答数据，集成搜索功能增强数据真实性
 
-**配置参数**:
-```python
-ENTITY_SOURCE_FILE = "out/greek_cuisine.jsonl"  # 实体数据源
-RESULTS_PER_ENTITY = 50                         # 每实体搜索结果数
-MAX_PAGES_TO_TRY_PER_ENTITY = 30               # 每实体最大尝试页面数
-VET_ATTEMPTS_PER_QA = 8                        # 验证尝试次数
+**输入**:
+- 输入数据文件（JSONL格式）
+- Gemini API配置
+- 输出目录配置
+
+**输出**:
+- 处理后的问答数据文件
+- 包含增强的搜索信息和验证结果
+
+**处理流程**:
+1. 读取输入JSONL数据
+2. 使用Gemini处理每个问答对
+3. 集成搜索功能验证信息
+4. 保存增强后的数据
+
+**Mermaid流程图**:
+```mermaid
+flowchart TD
+    A[开始] --> B[读取输入JSONL文件]
+    B --> C[遍历每个问答对]
+    C --> D[调用Gemini处理]
+    D --> E[集成搜索验证]
+    E --> F[增强数据质量]
+    F --> G[保存处理结果]
+    G --> H{更多数据?}
+    H -->|是| C
+    H -->|否| I[完成]
 ```
 
-### 2. synthetic_entity.py - 实体抽取器
+### 4. browsercamp_oai.py - OpenAI浏览器竞赛生成
 
-**目的**: 单次搜索 + 批量抓取 + LLM正文抽取（支持中英locale），可选只保留维基百科搜不到的实体
+**目的**: 使用OpenAI处理特定领域问答数据，集成搜索功能
+
+**输入**:
+- 输入数据文件（JSONL格式）
+- OpenAI API配置
+- 输出目录配置
+
+**输出**:
+- 处理后的问答数据文件
+- 包含搜索增强的验证信息
+
+**处理流程**:
+1. 读取输入数据文件
+2. 使用OpenAI API处理每个条目
+3. 集成搜索工具进行验证
+4. 保存最终结果
+
+**Mermaid流程图**:
+```mermaid
+flowchart TD
+    A[开始] --> B[配置OpenAI客户端]
+    B --> C[读取输入数据]
+    C --> D[批量处理问答对]
+    D --> E[搜索验证]
+    E --> F[质量评估]
+    F --> G[保存结果]
+    G --> H[完成]
+```
+
+### 5. basicqa_generator_huichi.py - 辉池基础问答生成器
+
+**目的**: 辉池定制版本的基础问答生成器，针对特定需求优化
 
 **特性**:
-- 只调用一次serp_search，拿到一批URL
-- craw_page批量抓取正文
-- LLM按页抽取实体（严格JSON）
-- 可选：用site:wikipedia.org/zh.wikipedia.org过滤维基可搜到的实体
-- 不保存页面全文，只保存 `{entity, why_uncommon, source_url, source_title, topic}`
+- 基于basicqa_generator.py的定制版本
+- 针对特定数据格式和处理流程优化
+- 增强的错误处理和重试机制
 
-**示例用法**:
-```bash
-# 英文数据集
-python synthetic_entity.py \
-  --topic "Chinese Cuisine" \
-  --server ../server/serp_search.py --server ../server/craw_page.py \
-  --k 25 --per-page 8 --model gpt-4o \
-  --locale en --only-nonwiki --out out/hc
-
-# 中文数据集  
-python synthetic_entity.py \
-  --topic "合成生物学" \
-  --server ../server/serp_search.py --server ../server/craw_page.py \
-  --k 25 --per-page 8 --model gpt-4o \
-  --locale zh --only-nonwiki --check-zh --out out/synbio_zh
+**处理流程**:
+```mermaid
+flowchart TD
+    A[开始] --> B[加载定制配置]
+    B --> C[数据预处理]
+    C --> D[定制化实体生成]
+    D --> E[增强验证流程]
+    E --> F[定制输出格式]
+    F --> G[完成]
 ```
 
-### 3. inject_fuzz_gpt5.py - GPT-5搜索注入
+### 6. entity_generator_huichi.py - 辉池实体生成器
 
-**用途**: 处理特定领域的问答数据，集成GPT-5搜索功能
+**目的**: 辉池定制版本的实体生成器，支持特定业务需求
 
-**配置**:
-```python
-INPUT_FILE = "/path/to/input/data.jsonl"     # 输入文件
-OUTPUT_DIR = "result/Economics"              # 输出目录
-MODEL_NAME = "gpt-5-search"                  # 模型名称
-```
+**特性**:
+- 基于entity_generator.py的定制版本
+- 特定的指令维度配置
+- 定制化的输出格式和处理逻辑
 
-### 4. inject_fuzz_gemini.py - Gemini搜索注入
-
-**用途**: 使用Gemini处理数据，集成Google搜索功能
-
-**配置**:
-```python
-INPUT_FILE = "/path/to/biology_data.jsonl"   # 输入文件
-OUTPUT_BASE = "result-gemini"                # 输出目录
-MODEL_NAME = "gemini-2.5-pro"                # 模型名称
-```
-
-### 5. entity_questions_generator.py - 实体问题生成器
-
-**用途**: 生成冷门实体相关问题，支持SERPAPI实体验证
-
-**配置**:
-```python
-DEFAULT_MODEL = "gpt-4o"                     # 默认模型
-MAX_VALIDATION_ATTEMPTS = 5                  # 最大验证尝试
-MAX_FEATURES = 8                             # 最大特征数
-DEFAULT_ROUNDS = 10                         # 默认生成轮次
-OUTPUT_FILE = "entity_questions.jsonl"       # 输出文件
+**处理流程**:
+```mermaid
+flowchart TD
+    A[开始] --> B[加载定制维度]
+    B --> C[生成业务特定组合]
+    C --> D[调用生成API]
+    D --> E[定制后处理]
+    E --> F[保存业务格式]
+    F --> G[完成]
 ```
 
 ## ⚙️ 配置说明
 
 ### 数据源配置
-- `ENTITY_SOURCE_FILE`: 实体JSONL数据源文件路径
+- 实体JSONL数据源文件路径
 - 格式要求：每行包含 `{"entity": "实体名称"}`
 
-### 搜索配置  
-- `RESULTS_PER_ENTITY`: 每个实体搜索的结果数量
-- `CRAWL_TIMEOUT_SEC`: 页面抓取超时时间（秒）
-- `MAX_PAGE_CHARS`: 页面内容最大字符数
+### 搜索配置
+- 每个实体搜索的结果数量
+- 页面抓取超时时间（秒）
+- 页面内容最大字符数
 
 ### 质量控制
-- `MAX_PAGES_TO_TRY_PER_ENTITY`: 每个实体尝试的最大页面数
-- `VET_ATTEMPTS_PER_QA`: 每个QA对的验证尝试次数
+- 每个实体尝试的最大页面数
+- 每个QA对的验证尝试次数
 - 只有所有验证尝试都失败的QA才会被保留
 
 ## 🎯 功能特性
 
-### synthetic.py
+### basicqa_generator.py
 - ✅ 基于实体生成困难问答对
-- ✅ 多轮LLM验证确保质量  
+- ✅ 多轮LLM验证确保质量
 - ✅ 支持MCP工具集成（搜索+抓取）
 - ✅ 自动过滤简单问题
 
-### synthetic_entity.py
+### entity_generator.py
 - ✅ 从网页内容抽取冷门实体
 - ✅ 支持中英文多语言
 - ✅ 维基百科实体过滤
 - ✅ 批量处理高效抽取
 
-### inject_fuzz_*.py
-- ✅ 支持GPT-5和Gemini双引擎
+### browsercamp_*.py
+- ✅ 支持OpenAI和Gemini双引擎
 - ✅ 自动提取关键字段（问题、答案、数据源）
 - ✅ 集成搜索工具增强数据真实性
 - ✅ 批量处理JSONL格式数据
-
-### entity_questions_generator.py
-- ✅ 生成冷门实体相关问题
-- ✅ SERPAPI实体存在性验证
-- ✅ 特征提取和唯一性检查
-- ✅ 自动合并特征生成自然描述
 
 ## 📊 输出格式
 
@@ -156,7 +233,7 @@ OUTPUT_FILE = "entity_questions.jsonl"       # 输出文件
 {
   "entity": "实体名称",
   "question": "生成的问题",
-  "ground_truth": "正确答案", 
+  "ground_truth": "正确答案",
   "evidence_quote": "证据文本",
   "data_source": "数据源URL",
   "page_title": "页面标题",
@@ -185,7 +262,7 @@ OUTPUT_FILE = "entity_questions.jsonl"       # 输出文件
 
 1. **环境变量**: 优先读取 `.env` 文件中的配置
 2. **代码修改**: 直接修改文件顶部的配置常量
-3. **命令行参数**: synthetic_entity.py支持完整的命令行参数
+3. **命令行参数**: entity_generator.py支持完整的命令行参数
 
 ## 📝 使用建议
 
@@ -198,6 +275,6 @@ OUTPUT_FILE = "entity_questions.jsonl"       # 输出文件
 
 ### 常见问题
 1. **API密钥错误**: 检查环境变量设置
-2. **文件路径错误**: 确保输入文件存在且有读取权限  
+2. **文件路径错误**: 确保输入文件存在且有读取权限
 3. **网络超时**: 调整超时时间或重试机制
 4. **JSON解析错误**: 检查数据格式是否符合JSONL标准
