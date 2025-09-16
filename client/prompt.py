@@ -253,3 +253,144 @@ __all__ = [
     'get_qa_user_prompt',
     'get_vet_user_prompt'
 ]
+
+
+INSTRUCTION_DIMENSIONS = {
+    "disciplines": {
+        "STEM": ["Mathematics", "Physics", "Chemistry", "Biology", "Computer Science", "Engineering", "Materials Science", "Earth Sciences", "Astronomy", "Statistics"],
+        "Social Sciences": ["Economics", "Political Science", "Sociology", "Psychology", "Anthropology", "Geography", "Law", "Education", "Communication Studies", "International Relations"],
+        "Humanities & Arts": ["History", "Philosophy", "Literature", "Linguistics", "Art History", "Music Studies", "Theater Studies", "Religious Studies", "Archaeology", "Aesthetics"],
+        "Applied Sciences": ["Medicine", "Public Health", "Environmental Science", "Urban Planning", "Business", "Management", "Agriculture", "Architecture", "Design Studies", "Information Science"],
+        "Interdisciplinary": ["Cognitive Science", "Bioinformatics", "Computational Social Science", "Digital Humanities", "Science & Technology Studies", "Sustainability Studies", "Complex Systems", "Network Science"]
+    },
+    
+    "topics_by_discipline": {
+        "Mathematics": ["Topological Data Analysis", "Machine Learning Theory", "Graph Theory Applications", "Optimization Algorithms", "Probability and Statistics", "Numerical Computing", "Cryptography", "Game Theory"],
+        "Physics": ["Quantum Computing", "Condensed Matter Physics", "Complex Systems", "Soft Matter", "Photonics", "Plasma Physics", "Astrophysics", "Biophysics"],
+        "Chemistry": ["Catalytic Chemistry", "Materials Chemistry", "Green Chemistry", "Pharmaceutical Chemistry", "Computational Chemistry", "Electrochemistry", "Polymer Chemistry", "Analytical Chemistry"],
+        "Biology": ["Synthetic Biology", "Systems Biology", "Evolutionary Biology", "Molecular Biology", "Ecology", "Neurobiology", "Developmental Biology", "Conservation Biology"],
+        "Computer Science": ["AI Ethics", "Quantum Algorithms", "Privacy-Preserving Computing", "Human-Computer Interaction", "Distributed Systems", "Computer Vision", "Natural Language Processing", "Cybersecurity"],
+        "Economics": ["Behavioral Economics", "Experimental Economics", "Digital Economy", "Development Economics", "Environmental Economics", "Labor Economics", "Financial Economics", "Industrial Organization"],
+        "Sociology": ["Digital Sociology", "Social Networks", "Social Mobility", "Social Psychology", "Organizational Sociology", "Urban Sociology", "Cultural Sociology", "Social Policy"],
+        "Psychology": ["Cognitive Psychology", "Developmental Psychology", "Social Psychology", "Neuropsychology", "Positive Psychology", "Cultural Psychology", "Health Psychology", "Engineering Psychology"],
+        "History": ["Digital History", "Environmental History", "History of Science and Technology", "Social History", "Cultural History", "Global History", "Oral History", "Public History"],
+        "Philosophy": ["Philosophy of Technology", "Philosophy of Science", "Political Philosophy", "Ethics", "Epistemology", "Philosophy of Mind", "Philosophy of Language", "Aesthetics"],
+        "Art": ["Digital Art", "Interactive Art", "Socially Engaged Art", "Eco-Art", "Performance Art", "Visual Culture", "Art Therapy", "Creative Industries"],
+        "Environmental Science": ["Climate Change", "Biodiversity", "Pollution Control", "Ecological Restoration", "Sustainable Development", "Environmental Justice", "Ecosystem Services", "Circular Economy"],
+        "Medicine": ["Precision Medicine", "Digital Health", "Global Health", "Aging", "Mental Health", "Infectious Disease Control", "Health Inequalities", "Medical AI"],
+        "Education": ["Educational Technology", "Online Learning", "Educational Assessment", "Educational Equity", "Lifelong Learning", "STEM Education", "Multicultural Education", "Education Policy"]
+    },
+    
+    "task_types": [
+        "Systematic Literature Review", "Prospective Roadmap", "Comparative Analysis", "Mechanism Modeling", "Causal Inference Study", 
+        "Evaluation Framework Design", "Policy Analysis", "Technology Assessment", "Risk Assessment", "Ethical Impact Assessment",
+        "Experimental Design Protocol", "Survey Research Design", "Monitoring System", "Intervention Strategy", "Best Practices Summary",
+        "Interdisciplinary Integration", "Methodological Innovation", "Tool Development", "Standard Setting", "Capacity Building Framework"
+    ],
+    
+    "methodologies": {
+        "Quantitative Methods": ["Randomized Controlled Trials", "Quasi-experimental Design", "Difference-in-Differences", "Regression Discontinuity", "Instrumental Variables", "Structural Equation Modeling", 
+                               "Bayesian Statistics", "Machine Learning", "Time Series Analysis", "Panel Data Analysis"],
+        "Qualitative Methods": ["In-depth Interviews", "Focus Groups", "Participant Observation", "Case Studies", "Grounded Theory", "Discourse Analysis", 
+                              "Content Analysis", "Ethnography", "Phenomenological Research", "Action Research"],
+        "Mixed Methods": ["Triangulation", "Explanatory Sequential", "Exploratory Sequential", "Concurrent Convergent", "Embedded Design"],
+        "Computational Methods": ["Agent-Based Modeling", "Network Analysis", "Text Mining", "Image Analysis", "Simulation Modeling", 
+                                "Data Mining", "Complex Systems Analysis", "Artificial Intelligence", "Blockchain Technology", "Quantum Computing"],
+        "Participatory Methods": ["Community-Based Participatory Research", "Citizen Science", "Design Thinking", "Co-design", "Stakeholder Engagement"]
+    },
+    
+    "geographical_scope": [
+        "Global", "Developed Countries", "Developing Countries", "Least Developed Countries", 
+        "North America", "Latin America", "Europe", "East Asia", "Southeast Asia", "South Asia", "Middle East", "Africa", "Oceania",
+        "China", "United States", "European Union", "OECD Countries", "G20", "BRICS",
+        "Urban Areas", "Rural Areas", "Remote Areas", "Border Regions", "Island Nations"
+    ],
+    
+    "target_populations": [
+        "Children and Adolescents", "Adults", "Elderly", "Women", "Men", "LGBTQ+ Communities",
+        "Low-income Groups", "Middle Class", "High-income Groups", "Ethnic Minorities", "Indigenous Peoples",
+        "Students", "Teachers", "Researchers", "Policymakers", "Entrepreneurs", "Workers",
+        "Patients", "People with Disabilities", "Immigrants", "Refugees", "Homeless Individuals", "Farmers", "Fishermen"
+    ],
+    
+    "time_horizons": [
+        "Historical Review (10+ years ago)", "Recent History (5-10 years)", "Current Status", 
+        "Short-term Forecast (1-2 years)", "Medium-term Planning (3-5 years)", "Long-term Outlook (5-10 years)",
+        "Extended Long-term (10-20 years)", "Generational Changes (20+ years)", "Scenarios to 2030", 
+        "Scenarios to 2050", "Scenarios to 2100"
+    ],
+    
+    "data_sources": [
+        "Academic Literature Databases", "Government Statistics", "International Organization Data", "Commercial Data", 
+        "Social Media Data", "Sensor Data", "Remote Sensing Data", "Survey Data", "Experimental Data",
+        "Administrative Records", "Electronic Health Records", "Educational Administrative Data", "Financial Transaction Data",
+        "Patent Data", "News Media Data", "Historical Archives", "Oral History", "Archaeological Artifacts"
+    ],
+    
+    "ethical_constraints": [
+        "Privacy Protection", "Informed Consent", "Data Security", "Algorithmic Fairness", "Transparency", 
+        "Accountability", "Human Dignity", "Child Protection", "Vulnerable Population Protection", 
+        "Cultural Sensitivity", "Environmental Responsibility", "Social Responsibility", "Research Ethics", "AI Ethics"
+    ],
+    
+    "regulatory_frameworks": [
+        "GDPR", "CCPA", "HIPAA", "FERPA", "IRB Review", "Animal Research Ethics",
+        "Clinical Trial Standards", "Data Localization", "International Sanctions", "Intellectual Property", 
+        "Open Source Licenses", "Academic Integrity", "Conflict of Interest Disclosure"
+    ],
+    
+    "resource_constraints": {
+        "Budget": ["Low Budget (<$100K)", "Medium Budget ($100K-$500K)", "High Budget ($500K+)"],
+        "Timeline": ["Urgent (<3 months)", "Short-term (3-12 months)", "Medium-term (1-3 years)", "Long-term (3+ years)"],
+        "Data Access": ["Open Data", "Restricted Data", "Data Collection Required", "Scarce Data", "Sensitive Data"],
+        "Computing Resources": ["Local Computing", "Cloud Computing", "High-Performance Computing", "Quantum Computing", "Edge Computing"],
+        "Team Size": ["Individual", "Small Team (2-5 people)", "Medium Team (6-15 people)", "Large Team (15+ people)"]
+    },
+    
+    "output_formats": {
+        "Report Types": ["Research Proposal", "White Paper", "Policy Brief", "Technical Report", "Evaluation Report", 
+                        "Best Practices Guide", "Standards Document", "Roadmap", "Feasibility Study"],
+        "Target Audiences": ["Academic Peers", "Policymakers", "Corporate Executives", "Technical Experts", "General Public", 
+                           "Students", "Media", "Investors", "International Organizations", "NGOs"],
+        "Report Lengths": ["Brief (500-1000 words)", "Standard (1000-3000 words)", "Detailed (3000-8000 words)", 
+                          "Monograph-level (8000+ words)"],
+        "Writing Styles": ["Academic Rigorous", "Policy-oriented", "Technical Documentation", "Accessible", "Persuasive", "Neutral Objective"],
+        "Visualization Types": ["Flowcharts", "Causal Diagrams", "Network Graphs", "Timelines", "Dashboards", "Maps", 
+                              "Statistical Charts", "Concept Maps", "Decision Trees", "Roadmaps"]
+    },
+    
+    "openness_parameters": {
+        "Alternative Count": [3, 4, 5, 6, 7],      # N alternative solutions
+        "Perspective Count": [2, 3, 4],           # P disciplinary perspectives
+        "Uncertainty Count": [2, 3, 4, 5],        # K key uncertainties
+        "Tradeoff Dimensions": [2, 3, 4],         # M tradeoff dimensions
+        "Scenario Count": [2, 3, 4, 5]            # Number of scenarios
+    },
+    
+    "analysis_requirements": [
+        "Critical Analysis", "Comparative Assessment", "Stakeholder Analysis", "Cost-Benefit Analysis",
+        "Risk-Benefit Analysis", "SWOT Analysis", "Gap Analysis", "Trend Analysis", 
+        "Impact Assessment", "Feasibility Analysis", "Sensitivity Analysis", "Scenario Planning"
+    ],
+    
+    "research_approaches": [
+        "Evidence-based", "Theory-driven", "Data-driven", "Problem-oriented", "Solution-focused",
+        "Participatory", "Transdisciplinary", "Systems Thinking", "Design Thinking", "Innovation-focused"
+    ]
+}
+
+ENTITY_GENERATE_PROMPT_TEMPLATE = """Generate one niche, obscure but academically or practically valuable entity based on:
+
+- Primary Domain: {topic}
+- Analytical Focus 1 ({random_key1}): {random_value1}
+- Analytical Focus 2 ({random_key2}): {random_value2}
+
+Requirements:
+- Entity can be any type: institution, discipline, species, organization, concept, technology, cultural phenomenon, etc.
+- Must be niche and uncommon, not mainstream
+- Should have unique value or research significance
+- Must reflect the intersection of both analytical focuses
+
+Output only the entity name, nothing else.
+Just Like: "Entity Name"
+"""

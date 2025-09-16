@@ -70,13 +70,13 @@ class AsyncGeminiClient:
         self.semaphore = asyncio.Semaphore(max_concurrent)
         
         # 默认配置
-        # self.default_config = GenerateContentConfig(
+        self.default_config = GenerateContentConfig(
         #     tools=[Tool(google_search=GoogleSearch())],
-        #     temperature=0.7,
+            temperature=0.7,
         #     max_output_tokens=2048,
         #     top_p=0.95,
         #     top_k=40
-        # )
+        )
 
     @retry(
         stop=stop_after_attempt(3),
@@ -104,8 +104,8 @@ class AsyncGeminiClient:
         """
         async with self.semaphore:
             try:
+                config = self.default_config.copy()
                 if system_instruction:
-                    config = types.GenerateContentConfig()
                     config.system_instruction = system_instruction
                 if config_override:
                     config = config_override
@@ -176,45 +176,51 @@ class AsyncGeminiClient:
                     result["unknown_parts"].append(str(part))
             
             # 提取grounding metadata
-            if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+            if hasattr(candidate, 'grounding_metadata'):
                 metadata = candidate.grounding_metadata
-                grounding_data = {}
-                
-                # 提取grounding chunks
-                if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
-                    grounding_data['chunks'] = []
-                    for chunk in metadata.grounding_chunks:
-                        grounding_data['chunks'].append(dict(chunk.web))
-                
-                # 提取grounding supports
-                if hasattr(metadata, 'grounding_supports') and metadata.grounding_supports:
-                    grounding_data['supports'] = []
-                    for support in metadata.grounding_supports:
-                        grounding_data['supports'].append({"segment": dict(support.segment), "groundingChunkIndices": list(support.grounding_chunk_indices)})
-                
-                if hasattr(metadata, 'web_search_queries') and metadata.web_search_queries:
-                    grounding_data['web_search_queries'] = list(metadata.web_search_queries)
-                
-                if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
-                    grounding_data['search_entry_point'] = str(metadata.search_entry_point)
-                
-                if hasattr(metadata, 'retrieval_queries') and metadata.retrieval_queries:
-                    grounding_data['retrieval_queries'] = list(metadata.retrieval_queries)
-                
-                # if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
-                #     grounding_data['search_entry_point'] = dict(metadata.search_entry_point)
-                
-                result["grounding_metadata"] = grounding_data
+                if metadata:
+                    grounding_data = {}
+                    
+                    # 提取grounding chunks
+                    if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                        grounding_data['chunks'] = []
+                        for chunk in metadata.grounding_chunks:
+                            grounding_data['chunks'].append(dict(chunk.web))
+                    
+                    # 提取grounding supports
+                    if hasattr(metadata, 'grounding_supports'):
+                        if metadata.grounding_supports:
+                            grounding_data['supports'] = []
+                            for support in metadata.grounding_supports:
+                                grounding_data['supports'].append({"segment": dict(support.segment), "groundingChunkIndices": list(support.grounding_chunk_indices)})
+                    
+                    if hasattr(metadata, 'web_search_queries'):
+                        if metadata.web_search_queries:
+                            grounding_data['web_search_queries'] = list(metadata.web_search_queries)
+                    
+                    if hasattr(metadata, 'search_entry_point'):
+                        if metadata.search_entry_point:
+                            grounding_data['search_entry_point'] = str(metadata.search_entry_point)
+                    
+                    if hasattr(metadata, 'retrieval_queries'):
+                        if metadata.retrieval_queries:
+                            grounding_data['retrieval_queries'] = list(metadata.retrieval_queries)
+                    
+                    # if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+                    #     grounding_data['search_entry_point'] = dict(metadata.search_entry_point)
+                    
+                    result["grounding_metadata"] = grounding_data
             
             # 提取search entry point
-            if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
-                # search_point = candidate.search_entry_point
-                # search_data = {}
-                # if hasattr(search_point, 'rendered_content'):
-                #     search_data['rendered_content'] = search_point.rendered_content
-                # if hasattr(search_point, 'sdk_blob'):
-                #     search_data['sdk_blob'] = str(search_point.sdk_blob)
-                result["search_entry_point"] = dict(metadata.search_entry_point)
+            if hasattr(metadata, 'search_entry_point'):
+                if metadata.search_entry_point:
+                    # search_point = candidate.search_entry_point
+                    # search_data = {}
+                    # if hasattr(search_point, 'rendered_content'):
+                    #     search_data['rendered_content'] = search_point.rendered_content
+                    # if hasattr(search_point, 'sdk_blob'):
+                    #     search_data['sdk_blob'] = str(search_point.sdk_blob)
+                    result["search_entry_point"] = dict(metadata.search_entry_point)
             
             # 提取citations
             # if hasattr(candidate, 'citation_metadata') and candidate.citation_metadata:
@@ -234,23 +240,25 @@ class AsyncGeminiClient:
             #         result["citations"].append(dict(citation))
             
             # 提取安全评级
-            if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
-                # result["safety_ratings"] = []
-                # for rating in candidate.safety_ratings:
-                #     rating_data = {}
-                #     if hasattr(rating, 'category'):
-                #         rating_data['category'] = str(rating.category)
-                #     if hasattr(rating, 'probability'):
-                #         rating_data['probability'] = str(rating.probability)
-                #     if hasattr(rating, 'severity'):
-                #         rating_data['severity'] = str(rating.severity)
-                #     if hasattr(rating, 'blocked'):
-                #         rating_data['blocked'] = rating.blocked
-                    result["safety_ratings"].append(dict(candidate.safety_ratings))
+            if hasattr(candidate, 'safety_ratings'):
+                if candidate.safety_ratings:
+                    # result["safety_ratings"] = []
+                    # for rating in candidate.safety_ratings:
+                    #     rating_data = {}
+                    #     if hasattr(rating, 'category'):
+                    #         rating_data['category'] = str(rating.category)
+                    #     if hasattr(rating, 'probability'):
+                    #         rating_data['probability'] = str(rating.probability)
+                    #     if hasattr(rating, 'severity'):
+                    #         rating_data['severity'] = str(rating.severity)
+                    #     if hasattr(rating, 'blocked'):
+                    #         rating_data['blocked'] = rating.blocked
+                        result["safety_ratings"].append(dict(candidate.safety_ratings))
 
             # 提取URL上下文元数据
-            if hasattr(candidate, 'url_context_metadata') and candidate.url_context_metadata:
-                result["url_context_metadata"] = dict(candidate.url_context_metadata)
+            if hasattr(candidate, 'url_context_metadata'):
+                if candidate.url_context_metadata:
+                    result["url_context_metadata"] = dict(candidate.url_context_metadata)
                 
         except Exception as e:
             import traceback
