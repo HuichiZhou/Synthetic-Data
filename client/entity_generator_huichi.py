@@ -280,7 +280,7 @@ class LLMPageEntityExtractor:
             model=self.model,
             messages=msgs,
             temperature=0.2,
-            max_tokens=1500,
+            # max_tokens=1500,
         )
         raw = resp.choices[0].message.content or "[]"
         # try:
@@ -390,18 +390,18 @@ async def run_pipeline(
             for r in deduped:
                 print(json.dumps(asdict(r), ensure_ascii=False), file=f)
 
-        csv_path = f"{out_prefix}.csv"
-        if pd is not None:
-            df = pd.DataFrame([asdict(r) for r in deduped])
-            df.to_csv(csv_path, index=False, encoding="utf-8")
-        else:
-            with open(csv_path, "w", encoding="utf-8") as f:
-                print("entity,why_uncommon,source_url,source_title,topic", file=f)
-                for r in deduped:
-                    why = (r.why_uncommon or "").replace(",", " ")
-                    print(f"{r.entity},{why},{r.source_url},{r.source_title},{r.topic}", file=f)
+        # csv_path = f"{out_prefix}.csv"
+        # if pd is not None:
+        #     df = pd.DataFrame([asdict(r) for r in deduped])
+        #     df.to_csv(csv_path, index=False, encoding="utf-8")
+        # else:
+        #     with open(csv_path, "w", encoding="utf-8") as f:
+        #         print("entity,why_uncommon,source_url,source_title,topic", file=f)
+        #         for r in deduped:
+        #             why = (r.why_uncommon or "").replace(",", " ")
+        #             print(f"{r.entity},{why},{r.source_url},{r.source_title},{r.topic}", file=f)
 
-        print(f"\n✅ 已保存：{jsonl_path} 和 {csv_path}")
+        print(f"\n✅ 已保存：{jsonl_path}")
         return deduped
     finally:
         import traceback
@@ -413,9 +413,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="单次搜索 + 批量抓取 + LLM 正文抽取（支持中英 locale，可选只保留非维基实体）")
     ap.add_argument("--topic", default="Nuclear Physics", help="主题/领域（英文或中文）")
     ap.add_argument("--server", action="append", help="MCP 工具 server 路径，可多次指定")
-    ap.add_argument("--k", type=int, default=20, help="serp_search 返回条数（若工具支持）")
+    ap.add_argument("--k", type=int, default=100, help="serp_search 返回条数（若工具支持）")
     ap.add_argument("--per-page", type=int, default=8, help="每页抽取实体上限，交给 LLM")
-    ap.add_argument("--out", default="out/result_v2_locale", help="输出前缀")
+    ap.add_argument("--out", default="result/result_v2_locale", help="输出前缀")
     ap.add_argument("--concurrency", type=int, default=8, help="抓取与抽取并发")
     ap.add_argument("--model", default=os.getenv("EXEC_MODEL", "gpt-4o"), help="用于抽取的 LLM 模型名")
     ap.add_argument("--only-nonwiki", action="store_true", help="只保留维基百科搜不到的实体")

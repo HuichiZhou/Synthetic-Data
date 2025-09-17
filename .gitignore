@@ -149,8 +149,6 @@ dmypy.json
 cython_debug/
 
 # Project specific
-result/
-*.jsonl
 *.csv
 out/
 temp/

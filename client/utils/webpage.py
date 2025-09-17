@@ -25,16 +25,24 @@ async def google_search(query: str, topk: int = 10) -> list[dict]:
     if not api_key:
         raise RuntimeError("Please set SERPAPI_KEY environment variable")
     
-    params = {
-        "engine": "google",
-        "q": query,
-        "api_key": api_key,
-        "num": topk
-    }
+    all_result = []
+    for i in range(int(topk / 10)):  # Retry up to 3 times
+        params = {
+            "engine": "google",
+            "q": query,
+            "api_key": api_key,
+            "num": topk,
+            "start": i * 10,
+        }
 
-    search = GoogleSearch(params)
-    results = search.get_dict()
-    return results.get("organic_results", [])
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        all_result.extend(results.get("organic_results", []))
+    
+    # all_result["link"] dup
+    all_result = {item["link"]: item for item in all_result}.values()
+    all_result = list(all_result)
+    return all_result
 
 async def crawl_page(url: str) -> str:
     """Deep crawl and extract key content from a web page (Markdown format).
