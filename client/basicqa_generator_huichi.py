@@ -1,4 +1,5 @@
 from __future__ import annotations
+from multiprocessing import pool
 import sys
 
 from utils.async_gemini import AsyncGeminiClient
@@ -257,6 +258,39 @@ class HardQABuilder:
                 passed = True
                 break
         return passed
+    
+    async def find_batch_hard_qa_for_entity(self, entitys: List) -> bool:
+        tasks = [self.find_one_hard_qa_for_entity(entity) for entity in entitys]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 将实体和结果配对
+        paired_results = []
+        for entity, result in zip(entitys, results):
+            if isinstance(result, Exception):
+                # 如果是异常，可以选择记录为None或者保留异常信息
+                paired_results.append((entity, None))
+            else:
+                paired_results.append((entity, result))
+
+        for entity, result in paired_results:
+            if result:
+                tried_urls: dict = {}
+                # 随机化：如果结果数少于MAX_PAGES_TO_TRY_PER_ENTITY，则全部尝试，否则随机取MAX_PAGES_TO_TRY_PER_ENTITY个url
+                if len(result) <= MAX_PAGES_TO_TRY_PER_ENTITY:
+                    tried_urls[entity] = result
+                else:
+                    sampled = random.sample(result, MAX_PAGES_TO_TRY_PER_ENTITY)
+                    tried_urls[entity] = sampled
+        
+        crawl_overall = []
+        for entity, urls in tried_urls.items():
+            crawl_tasks = [self.crawl(url) for _, url in urls]
+            crawl_results = await asyncio.gather(*crawl_tasks, return_exceptions=True)
+            for (title, url), crawl_result in zip(urls, crawl_results):
+                if isinstance(crawl_result, Exception):
+                    continue
+                else:
+                    crawl_overall.append((entity, title, url, crawl_result))
 
     async def find_one_hard_qa_for_entity(self, entity: str) -> Optional[QAPair]:
         results = await self.search(entity, RESULTS_PER_ENTITY)
@@ -264,7 +298,6 @@ class HardQABuilder:
             return None
 
         tried_urls: set[str] = set()
-        # 随机化：打乱结果，然后每轮从"最后一个"取（满足"随机爬最后网页"）
         pool = results[:]
         random.shuffle(pool)
 
