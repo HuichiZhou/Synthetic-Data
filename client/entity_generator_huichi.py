@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from contextlib import AsyncExitStack
 
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+
+from utils.text_utils import response_format
+from utils.webpage import google_search, crawl_page
+
 try:
     from tqdm import tqdm
 except Exception:
@@ -117,14 +122,14 @@ def _pick_arg(schema: Dict[str, Any], candidates: List[str]) -> Optional[str]:
             return k
     return None
 
-async def serp_query(mcp: MCPTools, topic: str, limit: int = 20) -> List[SerpItem]:
-    tool = mcp.serp_tool()
-    qk = _pick_arg(tool.schema, ["query", "q", "text", "keyword"]) or "query"
-    lk = _pick_arg(tool.schema, ["k", "limit", "topn", "n"])  # 可选
-    args: Dict[str, Any] = {qk: topic}
-    if lk:
-        args[lk] = limit
-    text, data = await mcp.call(tool, args)
+async def serp_query(topic: str, limit: int = 20) -> List[SerpItem]:
+    # tool = mcp.serp_tool()
+    # qk = _pick_arg(tool.schema, ["query", "q", "text", "keyword"]) or "query"
+    # lk = _pick_arg(tool.schema, ["k", "limit", "topn", "n"])  # 可选
+    # args: Dict[str, Any] = {qk: topic}
+    # if lk:
+    #     args[lk] = limit
+    data = await google_search(topic, limit)
     items: List[SerpItem] = []
     if isinstance(data, list):
         for row in data:
@@ -147,7 +152,7 @@ async def serp_query(mcp: MCPTools, topic: str, limit: int = 20) -> List[SerpIte
                 snippet=str(row.get("snippet") or row.get("summary") or row.get("description") or ""),
             ))
     else:
-        for u in URL_RE.findall(text):
+        for u in URL_RE.findall(str(data)):
             items.append(SerpItem(title="", url=u, snippet=""))
     # 去重
     seen, out = set(), []
@@ -159,14 +164,14 @@ async def serp_query(mcp: MCPTools, topic: str, limit: int = 20) -> List[SerpIte
     return out
 
 # ----------------------------- 批量抓取正文 -----------------------------
-async def crawl_many(mcp: MCPTools, serps: List[SerpItem], concurrency: int = 8, exclude_wiki_sources: bool = True) -> List[Tuple[str, str, str]]:
+async def crawl_many(serps: List[SerpItem], concurrency: int = 8, exclude_wiki_sources: bool = True) -> List[Tuple[str, str, str]]:
     """返回 [(url, title, content)] 列表。优先尝试批量抓取，失败则并发单抓。"""
     if exclude_wiki_sources:
         serps = [s for s in serps if "wikipedia.org" not in s.url and "zh.wikipedia.org" not in s.url]
 
-    crawl = mcp.crawl_tool()
-    urlk = _pick_arg(crawl.schema, ["url", "link", "target", "page"]) or "url"
-    urlsk = _pick_arg(crawl.schema, ["urls", "links", "targets"])  # 可选批量
+    # crawl = mcp.crawl_tool()
+    # urlk = _pick_arg(crawl.schema, ["url", "link", "target", "page"]) or "url"
+    # urlsk = _pick_arg(crawl.schema, ["urls", "links", "targets"])  # 可选批量
 
     urls = [s.url for s in serps if s.url]
     title_map = {s.url: (s.title or "") for s in serps}
@@ -174,8 +179,9 @@ async def crawl_many(mcp: MCPTools, serps: List[SerpItem], concurrency: int = 8,
     results: List[Tuple[str, str, str]] = []
 
     # 批量抓取
-    if urlsk and urls:
-        text, data = await mcp.call(crawl, {urlsk: urls})
+    if urls:
+        tasks = [crawl_page(url) for url in urls]
+        data = await asyncio.gather(*tasks, return_exceptions=True)
         if isinstance(data, list):
             for it in data:
                 u = str(it.get("url") or it.get("source_url") or "")
@@ -209,12 +215,12 @@ async def crawl_many(mcp: MCPTools, serps: List[SerpItem], concurrency: int = 8,
     # 并发逐条抓取
     async def one(u: str) -> Optional[Tuple[str, str, str]]:
         try:
-            text, data = await mcp.call(crawl, {urlk: u})
+            data = await crawl_page([u])
             if isinstance(data, dict):
                 for k in ["text", "content", "html", "body", "article"]:
                     if isinstance(data.get(k), str) and data[k].strip():
                         return (u, title_map.get(u, ""), data[k])
-            return (u, title_map.get(u, ""), text)
+            return (u, title_map.get(u, ""), str(data) or "")
         except Exception:
             return None
 
@@ -248,7 +254,13 @@ class LLMPageEntityExtractor:
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
         self.model = model
         self.locale = locale
-
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((Exception,)),
+        # retry_error_callback=retry_error_callback
+    )    
     async def extract_from_page(self, topic: str, url: str, title: str, content: str, want: int = 8) -> List[EntityRow]:
         text = content or ""
         text = " ".join(text.splitlines())[:8000]
@@ -271,14 +283,14 @@ class LLMPageEntityExtractor:
             max_tokens=1500,
         )
         raw = resp.choices[0].message.content or "[]"
+        # try:
+        #     l = raw.index("["); r = raw.rindex("]") + 1; raw = raw[l:r]
+        # except Exception:
+        #     pass
         try:
-            l = raw.index("["); r = raw.rindex("]") + 1; raw = raw[l:r]
+            arr = response_format(raw)
         except Exception:
-            pass
-        try:
-            arr = json.loads(raw)
-        except Exception:
-            arr = []
+            raise RuntimeError(f"LLM 返回格式错误，非 JSON 数组：{raw!r}")
         out: List[EntityRow] = []
         for o in arr:
             e = str(o.get("entity") or "").strip()
@@ -289,22 +301,22 @@ class LLMPageEntityExtractor:
         return out
 
 # ----------------------------- 维基过滤 -----------------------------
-async def is_on_wikipedia(mcp: MCPTools, entity: str, check_zh: bool = False) -> bool:
+async def is_on_wikipedia(entity: str, check_zh: bool = False) -> bool:
     qs = [f'site:wikipedia.org "{entity}"']
     if check_zh:
         qs.append(f'site:zh.wikipedia.org "{entity}"')
     for q in qs:
-        rs = await serp_query(mcp, q, limit=3)
+        rs = await serp_query(q, limit=3)
         if any("wikipedia.org" in (r.url or "") for r in rs):
             return True
     return False
 
-async def filter_nonwiki(mcp: MCPTools, rows: List[EntityRow], check_zh: bool, concurrency: int = 8) -> List[EntityRow]:
+async def filter_nonwiki(rows: List[EntityRow], check_zh: bool, concurrency: int = 8) -> List[EntityRow]:
     sem = asyncio.Semaphore(concurrency)
     async def keep(row: EntityRow) -> Optional[EntityRow]:
         async with sem:
             try:
-                on_wiki = await is_on_wikipedia(mcp, row.entity, check_zh=check_zh)
+                on_wiki = await is_on_wikipedia(row.entity, check_zh=check_zh)
                 return None if on_wiki else row
             except Exception:
                 return row
@@ -321,7 +333,7 @@ async def run_pipeline(
     topic: str,
     servers: List[str],
     per_query_k: int = 20,
-    out_prefix: str = "out/result_v2_locale",
+    out_prefix: str = "result/result_v2_locale",
     concurrency: int = 8,
     model: str = "gpt-4o",
     want_per_page: int = 8,
@@ -336,11 +348,11 @@ async def run_pipeline(
     if locale == "auto":
         locale = "zh" if CJK_RE.search(topic) else "en"
 
-    mcp = MCPTools()
-    await mcp.connect(servers)
+    # mcp = MCPTools()
+    # await mcp.connect(servers)
     try:
-        serps = await serp_query(mcp, topic, limit=per_query_k)
-        pages = await crawl_many(mcp, serps, concurrency=concurrency, exclude_wiki_sources=exclude_wiki_sources)
+        serps = await serp_query(topic, limit=per_query_k)
+        pages = await crawl_many(serps, concurrency=concurrency, exclude_wiki_sources=exclude_wiki_sources)
         extractor = LLMPageEntityExtractor(model=model, locale=locale)
 
         sem = asyncio.Semaphore(concurrency)
@@ -369,7 +381,7 @@ async def run_pipeline(
 
         # 可选：维基过滤（英文数据集默认只查 enwiki；若传了 --check-zh 也会查中文）
         if only_nonwiki:
-            deduped = await filter_nonwiki(mcp, deduped, check_zh=check_zh, concurrency=concurrency)
+            deduped = await filter_nonwiki(deduped, check_zh=check_zh, concurrency=concurrency)
 
         # 落盘
         Path(out_prefix).parent.mkdir(parents=True, exist_ok=True)
@@ -392,13 +404,15 @@ async def run_pipeline(
         print(f"\n✅ 已保存：{jsonl_path} 和 {csv_path}")
         return deduped
     finally:
-        await mcp.close()
+        import traceback
+        traceback.print_exc()
+    #     await mcp.close()
 
 # ----------------------------- CLI -----------------------------
 def main() -> None:
     ap = argparse.ArgumentParser(description="单次搜索 + 批量抓取 + LLM 正文抽取（支持中英 locale，可选只保留非维基实体）")
-    ap.add_argument("--topic", required=True, help="主题/领域（英文或中文）")
-    ap.add_argument("--server", action="append", required=True, help="MCP 工具 server 路径，可多次指定")
+    ap.add_argument("--topic", default="Nuclear Physics", help="主题/领域（英文或中文）")
+    ap.add_argument("--server", action="append", help="MCP 工具 server 路径，可多次指定")
     ap.add_argument("--k", type=int, default=20, help="serp_search 返回条数（若工具支持）")
     ap.add_argument("--per-page", type=int, default=8, help="每页抽取实体上限，交给 LLM")
     ap.add_argument("--out", default="out/result_v2_locale", help="输出前缀")

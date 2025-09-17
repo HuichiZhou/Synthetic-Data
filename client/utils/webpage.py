@@ -83,6 +83,6 @@ async def crawl_page(url: str) -> str:
     try:
         async with AsyncWebCrawler(config=browser_config) as crawler:
             result = await crawler.arun(url=url, config=run_config)
-            return result.markdown
+            return {"url": url, "text": result.markdown or ""}
     except Exception as exc:
-        return f"⚠️ Crawl error: {exc!s}"
+        return {"url": url, "text": f"⚠️ Crawl error: {exc!s}"}

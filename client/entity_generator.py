@@ -122,10 +122,10 @@ async def batch_deal(prompts, client):
 if __name__ == "__main__":
     combinations = generate_instruction_combinations(
         INSTRUCTION_DIMENSIONS, 
-        sample_size=100
+        sample_size=200
     )
 
-    chosen = asyncio.run(batch_deal(combinations, AsyncGeminiClient(max_concurrent=80, model="gemini-2.5-flash")))
+    chosen = asyncio.run(batch_deal(combinations, AsyncGeminiClient(max_concurrent=80, model="gemini-2.5-pro")))
 
     with open("result/generated_entities.jsonl", "w") as f:
         for item in tqdm(chosen):

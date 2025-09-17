@@ -1,23 +1,3 @@
-# from openai import OpenAI
-# base_url="http://118.196.11.39:3000/v1"
-# api_key="sk-JyxgZEKmBUCb8NoCr2K51vSY8I4xevzvHwLI245qlAZQCCcC"
-# client = OpenAI(base_url=base_url, api_key=api_key)
-
-
-# from openai import OpenAI
-# base_url="https://api.2077ai.org/v1"
-# api_key="sk-JyxgZEKmBUCb8NoCr2K51vSY8I4xevzvHwLI245qlAZQCCcC"
-# client = OpenAI(base_url=base_url, api_key=api_key)
-
-# response = client.responses.create(
-#     model="gpt-5-search",
-#     tools=[{"type": "web_search_preview"}],
-#     input="who is huichi zhou?",
-#     stream=False
-# )
-
-# print(response.output_text)
-# save as judge_gpt4omini.py
 # -*- coding: utf-8 -*-
 
 import os, json, argparse

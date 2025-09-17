@@ -35,12 +35,6 @@ CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o")
 ENTITY_SOURCE_FILE = "out/greek_cuisine.jsonl"
 ENTITIES = []
 
-# MCP 工具服务器配置
-SERVER_SCRIPTS = [
-    "./mcp/serp_search.py",
-    # "./mcp/craw_page.py",
-]
-
 # 搜索与抓取配置
 RESULTS_PER_ENTITY = 50
 CRAWL_TIMEOUT_SEC = 20
@@ -59,28 +53,6 @@ OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", "result/reverse_qa_hard.jsonl")
 #     for line in f:
 #         rec = json.loads(line)
 #         ENTITIES.append(rec["entity"])
-
-
-ENTITIES = [
-    "Vegan fasting dessert recipe",
-    "Greek Easter bread",
-    "Koulouri Thessalonikis",
-    "Lemon potato soup",
-    "Greek lemon chicken soup",
-    "Greek lemon rice soup",
-    "Greek lemon pie",
-    "Greek lemon cookies",
-    "Greek lemon cake",
-    "Greek lemon pasta",
-    "Greek lemon potatoes with feta cheese",
-    "Greek lemon chicken with potatoes and olives",
-    "Greek lemon chicken with orzo",
-    "Greek lemon chicken with rice",
-    "Greek lemon chicken with vegetables",
-    "Greek lemon chicken soup with orzo",
-    "Greek lemon chicken soup with rice",
-    "Greek lemon chicken soup with vegetables",
-]
 
 # ======================= LLM 封装 =======================
 

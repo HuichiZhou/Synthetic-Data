@@ -14,6 +14,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def retry_error_callback(retry_state):
+    exception = retry_state.outcome.exception()
+    print(f"Retry attempt {retry_state.attempt_number} failed: {type(exception).__name__} - {str(exception)}")
+    return None
+
 
 class AsyncGeminiClient:
     """
@@ -81,7 +86,8 @@ class AsyncGeminiClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((Exception,))
+        retry=retry_if_exception_type((Exception,)),
+        retry_error_callback=retry_error_callback
     )
     async def generate_single(
         self,
@@ -125,6 +131,8 @@ class AsyncGeminiClient:
                     return self._extract_text_content(response)
                 
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 logger.error(f"生成失败: {e}")
                 raise
 

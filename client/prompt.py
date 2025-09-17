@@ -6,8 +6,7 @@ This module consolidates all prompt templates used across the synthetic data gen
 
 # ======================= QA Generation Prompts =======================
 
-QA_SYSTEM = """
-You are a high-precision QA author. Produce ONE difficult but fair QA about the given ENTITY from the supplied PAGE TEXT.
+QA_SYSTEM = """You are a high-precision QA author. Produce ONE difficult but fair QA about the given ENTITY from the supplied PAGE TEXT.
 
 # INPUTS
 - ENTITY: <string>
@@ -91,6 +90,38 @@ You are a high-precision QA author. Produce ONE difficult but fair QA about the 
   "reject": true,
   "reason": "<1–2 sentences: which constraint failed and why>"
 }
+""".strip()
+
+QA_USER_TMPL = """
+ENTITY: {entity}
+PAGE TITLE: {title}
+PAGE URL: {url}
+
+PAGE TEXT (truncated to {max_chars} chars):
+```
+{page_text}
+```
+
+Return JSON:
+{{
+  "question": "... must include '{entity}' ...",
+  "answer": "short exact span",
+  "evidence_quote": "contains the exact answer"
+}}
+""".strip()
+
+VET_SYSTEM = """
+You answer the user's question without tools. If unsure, say "I don't know". Output strict JSON only.
+""".strip()
+
+VET_USER_TMPL = """
+Q: {question}
+
+Respond with JSON:
+{{
+  "answer": "<your best answer or 'I don't know'>",
+  "confidence": 0.0-1.0
+}}
 """.strip()
 
 VET_SYSTEM = """
