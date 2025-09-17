@@ -32,7 +32,7 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # 可选，代理时使用
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o")
 
 # 实体数据源配置
-ENTITY_SOURCE_FILE = "out/greek_cuisine.jsonl"
+ENTITY_SOURCE_FILE = r"result/result_v2_locale.jsonl"
 ENTITIES = []
 
 # 搜索与抓取配置
@@ -45,14 +45,14 @@ MAX_PAGES_TO_TRY_PER_ENTITY = 30  # 每个实体至多尝试多少不同网页
 VET_ATTEMPTS_PER_QA = 8  # 校验次数（都失败才保留）
 
 # 输出配置
-OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", "result/reverse_qa_hard.jsonl")
+OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", r"result/reverse_qa_hard.jsonl")
 
 # ======================= 初始化 =======================
 # 加载实体数据
-# with open(ENTITY_SOURCE_FILE, "r") as f:
-#     for line in f:
-#         rec = json.loads(line)
-#         ENTITIES.append(rec["entity"])
+with open(ENTITY_SOURCE_FILE, "r", encoding="utf-8") as f:
+    for line in f:
+        rec = json.loads(line)
+        ENTITIES.append(rec["entity"])
 
 # ======================= LLM 封装 =======================
 

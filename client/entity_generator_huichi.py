@@ -411,7 +411,7 @@ async def run_pipeline(
 # ----------------------------- CLI -----------------------------
 def main() -> None:
     ap = argparse.ArgumentParser(description="单次搜索 + 批量抓取 + LLM 正文抽取（支持中英 locale，可选只保留非维基实体）")
-    ap.add_argument("--topic", default="Nuclear Physics", help="主题/领域（英文或中文）")
+    ap.add_argument("--topic", default="Biomedical - Elderly Wellness and Care", help="主题/领域（英文或中文）")
     ap.add_argument("--server", action="append", help="MCP 工具 server 路径，可多次指定")
     ap.add_argument("--k", type=int, default=100, help="serp_search 返回条数（若工具支持）")
     ap.add_argument("--per-page", type=int, default=8, help="每页抽取实体上限，交给 LLM")
