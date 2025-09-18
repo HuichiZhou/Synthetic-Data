@@ -14,6 +14,7 @@ from contextlib import AsyncExitStack
 
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from prompt import Entity_Verify
 from utils.text_utils import response_format
 from utils.webpage import google_search, crawl_page
 
@@ -47,6 +48,7 @@ class EntityRow:
     source_url: str
     source_title: str
     topic: str
+    entity_verified: Optional[Dict[str, Any]] = None  # 可选，LLM 验证结果
 
 # ----------------------------- MCP 工具封装 -----------------------------
 @dataclass
@@ -55,6 +57,8 @@ class ToolInfo:
     description: str
     schema: Dict[str, Any]
     session: ClientSession
+
+gemini_filter = True if os.getenv("GEMINI_FILTER", "1") not in {"0", "false", "False"} else False
 
 class MCPTools:
     def __init__(self) -> None:
@@ -383,6 +387,19 @@ async def run_pipeline(
         if only_nonwiki:
             deduped = await filter_nonwiki(deduped, check_zh=check_zh, concurrency=concurrency)
 
+        if gemini_filter: 
+            from utils.async_gemini import AsyncGeminiClient
+            from google.genai import types
+            response_format
+            gemini_client = AsyncGeminiClient(max_concurrent=80, model="gemini-2.5-pro")
+            prompts = [Entity_Verify.format(Entity=Entity.entity) for Entity in deduped]
+            responses = await gemini_client.generate_batch(
+                prompts,
+                config_override=types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
+            )
+            for i, resp in enumerate(responses):
+                deduped[i].entity_verified = response_format(resp['text'][-1])
+
         # 落盘
         Path(out_prefix).parent.mkdir(parents=True, exist_ok=True)
         jsonl_path = f"{out_prefix}.jsonl"
@@ -413,7 +430,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="单次搜索 + 批量抓取 + LLM 正文抽取（支持中英 locale，可选只保留非维基实体）")
     ap.add_argument("--topic", default="Biomedical - Elderly Wellness and Care", help="主题/领域（英文或中文）")
     ap.add_argument("--server", action="append", help="MCP 工具 server 路径，可多次指定")
-    ap.add_argument("--k", type=int, default=100, help="serp_search 返回条数（若工具支持）")
+    ap.add_argument("--k", type=int, default=10, help="serp_search 返回条数（若工具支持）")
     ap.add_argument("--per-page", type=int, default=8, help="每页抽取实体上限，交给 LLM")
     ap.add_argument("--out", default="result/result_v2_locale", help="输出前缀")
     ap.add_argument("--concurrency", type=int, default=8, help="抓取与抽取并发")
