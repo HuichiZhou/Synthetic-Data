@@ -2,9 +2,10 @@ from __future__ import annotations
 from multiprocessing import pool
 import sys
 
+from utils.text_utils import response_format
 from utils.async_gemini import AsyncGeminiClient
 from utils.webpage import crawl_page, google_search
-from prompt import QA_SYSTEM, QA_USER_TMPL, VET_SYSTEM, VET_USER_TMPL
+from prompt import QA_SYSTEM, QA_USER_TMPL, VET_SYSTEM, VET_USER_TMPL, basic_qa_extract_content
 from utils import safe_json_loads, normalize, answer_matches, truncate
 
 import asyncio
@@ -21,8 +22,8 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
 # --- MCP stdio client ---
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+# from mcp import ClientSession, StdioServerParameters
+# from mcp.client.stdio import stdio_client
 
 # 从网页内容中抽取冷门实体
 # 搜索主题 → 抓取网页 → LLM抽取实体
@@ -37,7 +38,7 @@ ENTITY_SOURCE_FILE = r"result/result_v2_locale.jsonl"
 ENTITIES = []
 
 # 搜索与抓取配置
-RESULTS_PER_ENTITY = 50
+RESULTS_PER_ENTITY = 10
 CRAWL_TIMEOUT_SEC = 20
 MAX_PAGE_CHARS = 100_000
 
@@ -171,10 +172,81 @@ class HardQABuilder:
                 out.append((title, url))
         return out
 
+    async def batch_crawl(self, url_data: Dict[str, List[str]]) -> Dict[str, List[Tuple[str, str]]]:
+        """
+        Crawls a batch of URLs grouped by ID, and returns the results in the same structure.
+
+        Args:
+            url_data: A dictionary where keys are IDs and values are lists of URLs.
+                    e.g., {"id1": ["url_a", "url_b"], "id2": ["url_c"]}
+
+        Returns:
+            A dictionary with the same keys and lists of (title, text) results.
+            e.g., {"id1": [("title_a", "text_a"), ("title_b", "text_b")], "id2": [("title_c", "text_c")]}
+        """
+        # 1. --- FLATTEN AND TRACK ---
+        # Create a single list of all URLs to process in one batch.
+        # Also, create a list to track each ID and the number of URLs it has.
+        all_urls = []
+        id_counts = []  # This will store tuples of (id, number_of_urls)
+
+        for request_id, urls_list in url_data.items():
+            # Ensure the value is a non-empty list before processing
+            if urls_list and isinstance(urls_list, list):
+                all_urls.extend(urls_list)
+                id_counts.append((request_id, len(urls_list)))
+
+        # If there are no URLs at all, return a dictionary with the original keys and empty lists.
+        if not all_urls:
+            return {key: [] for key in url_data.keys()}
+
+        # 2. --- CORE PROCESSING ---
+        # Call the API with the single, flattened list of all URLs.
+        flat_results = await self.gemini_client.generate_batch(
+            [basic_qa_extract_content.format(url=url[1]) for url in all_urls],
+            config_override=types.GenerateContentConfig(tools=[{"url_context": {}}])
+        )
+
+        # Process the flat list of results into (title, text) tuples.
+        processed_flat_results = []
+        for res in flat_results:
+            if isinstance(res, dict):
+                title = res['text'][-1].split("\n")[0]
+                text = res['text'][-1]
+                processed_flat_results.append((title, text))
+            else:
+                processed_flat_results.append(("", "")) # Placeholder for errors
+
+        # 3. --- RESTRUCTURE THE OUTPUT ---
+        # Initialize the output dictionary with the original keys and empty lists for all entries.
+        final_results = {key: [] for key in url_data.keys()}
+        
+        current_position = 0
+        # Use the tracking info (id_counts) to slice the flat results list
+        # and assign the correct results back to each ID.
+        for request_id, count in id_counts:
+            # Slice the portion of the results belonging to the current ID
+            results_slice = processed_flat_results[current_position : current_position + count]
+            final_results[request_id] = list(zip(results_slice, all_urls[current_position : current_position + count]))
+            
+            # Move the position marker for the next slice
+            current_position += count
+
+        for k, v in final_results.items():
+            delete_list = []
+            for i in v:
+                if i[0][1].startswith("I am sorry, but I was unable to access the content of the provided URL."):
+                    delete_list.append(i)
+            for j in delete_list:
+                v.remove(j)
+            
+
+        return final_results
+
     async def crawl(self, url: str) -> Tuple[str, str]:
         # res = await self.bus.call("crawl_page", {"url": url})
         # res = await crawl_page(url)  # 直接调用函数，避免多次进程通信开销
-        res = await self.gemini_client.generate_single(f"Visit the website and extract all content from it, summarize the content of this URL in one sentence and output that sentence on the first line, and output the entire context in Markdown format :{url}", config_override=types.GenerateContentConfig(tools=[{"url_context": {}}]))
+        res = await self.gemini_client.generate_single(basic_qa_extract_content.format(url=url), config_override=types.GenerateContentConfig(tools=[{"url_context": {}}]))
         # 容错：可能直接是字符串，或是 dict
         if isinstance(res, str):
             title = url.rsplit("/", 1)[-1]
@@ -210,6 +282,60 @@ class HardQABuilder:
             text = str(res) or ""
         return title, text
 
+    async def gen_qa_batch_from_page(
+        self, entitys: str
+    ) -> List[Optional[QAPair]]:
+        # 1. --- FLATTEN AND TRACK ---
+        # Create a single list of all URLs to process in one batch.
+        # Also, create a list to track each ID and the number of URLs it has.
+        all_urls = []
+        id_counts = []
+        prompts = []
+
+        for request_id, urls_list in entitys.items():
+            # Ensure the value is a non-empty list before processing
+            if urls_list and isinstance(urls_list, list):
+                all_urls.extend(urls_list)
+                id_counts.append((request_id, len(urls_list)))
+                for page in urls_list:
+                    title = page[0][0]
+                    page_text = page[0][1]
+                    url = page[1][1]
+                    entity = request_id
+
+                    prompts.append(QA_USER_TMPL.format(entity=entity, title=title, url=url, max_chars=MAX_PAGE_CHARS, page_text=truncate(page_text, MAX_PAGE_CHARS)))
+
+        # If there are no URLs at all, return a dictionary with the original keys and empty lists.
+        if not all_urls:
+            return {key: [] for key in entitys.keys()}
+
+        # 2. --- CORE PROCESSING ---
+        # Call the API with the single, flattened list of all URLs.
+        flat_results = await self.gemini_client.generate_batch(prompts)
+
+        # Process the flat list of results into (title, text) tuples.
+        processed_flat_results = []
+        for res in flat_results:
+            if isinstance(res, dict):
+                processed_flat_results.append(response_format(res['text'][-1]))
+
+        # 3. --- RESTRUCTURE THE OUTPUT ---
+        # Initialize the output dictionary with the original keys and empty lists for all entries.
+        final_results = {key: [] for key in entitys.keys()}
+        
+        current_position = 0
+        # Use the tracking info (id_counts) to slice the flat results list
+        # and assign the correct results back to each ID.
+        for request_id, count in id_counts:
+            # Slice the portion of the results belonging to the current ID
+            results_slice = processed_flat_results[current_position : current_position + count]
+            final_results[request_id] = list(zip(results_slice, all_urls[current_position : current_position + count]))
+            
+            # Move the position marker for the next slice
+            current_position += count
+
+        return final_results
+
     async def gen_qa_from_page(
         self, entity: str, title: str, url: str, page_text: str
     ) -> Optional[QAPair]:
@@ -242,6 +368,73 @@ class HardQABuilder:
             )
         return None
 
+    async def vet_qa_batch(
+        self, entitys: str
+    ) -> List[Optional[QAPair]]:
+        all_urls = []
+        id_counts = []
+        prompts = []
+        qa_answer = []
+        
+
+        for request_id, urls_list in entitys.items():
+            # Ensure the value is a non-empty list before processing
+            if urls_list and isinstance(urls_list, list):
+                all_urls.extend(urls_list)
+                id_counts.append((request_id, len(urls_list)))
+                for page in urls_list:
+                    prompts.append(VET_USER_TMPL.format(question=page[0]['question']))
+                    qa_answer.append(page[0]['answer'])
+
+        result = [False for _ in range(len(prompts))]
+
+        # If there are no URLs at all, return a dictionary with the original keys and empty lists.
+        if not all_urls:
+            return {key: [] for key in entitys.keys()}
+
+        temps = [0.0, 0.2, 0.4, 0.7, 0.9, 0.3, 0.6, 0.8][:VET_ATTEMPTS_PER_QA]
+        for t in temps:
+                try:
+                    flat_results = await self.gemini_client.generate_batch(prompts, system_instruction=VET_SYSTEM, config_override=types.GenerateContentConfig(temperature=t, tools=[{"url_context": {}}]))
+                    for idx, j in enumerate(flat_results):
+                        if j is None:
+                            continue
+                        pred = (response_format(j['text'][-1]) or {}).get("answer") or ""
+                        try:
+                            if answer_matches(str(pred), qa_answer[idx]):
+                                prompts[idx] = "skip this time"
+                                result[idx] = True
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            print(f"[ERROR] Exception during vetting at temperature {t}: {e}")
+                            continue
+                    print(f"[INFO] Vetting round at temperature {t} completed. {sum(result)}/{len(result)} passed so far.")
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    print(f"[ERROR] Exception during batch vetting at temperature {t}: {e}")
+                    continue
+
+
+        # 3. --- RESTRUCTURE THE OUTPUT ---
+        # Initialize the output dictionary with the original keys and empty lists for all entries.
+        final_results = {key: [] for key in entitys.keys()}
+        
+        current_position = 0
+        # Use the tracking info (id_counts) to slice the flat results list
+        # and assign the correct results back to each ID.
+        for request_id, count in id_counts:
+            # Slice the portion of the results belonging to the current ID
+            results_slice = result[current_position : current_position + count]
+            final_results[request_id] = list(zip(results_slice, all_urls[current_position : current_position + count]))
+            
+            # Move the position marker for the next slice
+            current_position += count
+
+        return final_results
+
+
     async def vet_qa(self, qa: QAPair) -> bool:
         """返回 True 表示通过（至少有一次答对），False 表示 8 次都失败。"""
         passed = False
@@ -260,7 +453,7 @@ class HardQABuilder:
         return passed
     
     async def find_batch_hard_qa_for_entity(self, entitys: List) -> bool:
-        tasks = [self.find_one_hard_qa_for_entity(entity) for entity in entitys]
+        tasks = [self.search(entity, RESULTS_PER_ENTITY) for entity in entitys]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # 将实体和结果配对
@@ -272,9 +465,9 @@ class HardQABuilder:
             else:
                 paired_results.append((entity, result))
 
+        tried_urls: dict = {}
         for entity, result in paired_results:
             if result:
-                tried_urls: dict = {}
                 # 随机化：如果结果数少于MAX_PAGES_TO_TRY_PER_ENTITY，则全部尝试，否则随机取MAX_PAGES_TO_TRY_PER_ENTITY个url
                 if len(result) <= MAX_PAGES_TO_TRY_PER_ENTITY:
                     tried_urls[entity] = result
@@ -282,15 +475,16 @@ class HardQABuilder:
                     sampled = random.sample(result, MAX_PAGES_TO_TRY_PER_ENTITY)
                     tried_urls[entity] = sampled
         
-        crawl_overall = []
-        for entity, urls in tried_urls.items():
-            crawl_tasks = [self.crawl(url) for _, url in urls]
-            crawl_results = await asyncio.gather(*crawl_tasks, return_exceptions=True)
-            for (title, url), crawl_result in zip(urls, crawl_results):
-                if isinstance(crawl_result, Exception):
-                    continue
-                else:
-                    crawl_overall.append((entity, title, url, crawl_result))
+        p_list = await self.batch_crawl(tried_urls)
+
+        qa = await self.gen_qa_batch_from_page(p_list)
+
+        veted_qa = await self.vet_qa_batch(qa)
+
+        formated_veted_qa = {}
+        
+
+        return veted_qa
 
     async def find_one_hard_qa_for_entity(self, entity: str) -> Optional[QAPair]:
         results = await self.search(entity, RESULTS_PER_ENTITY)
@@ -335,13 +529,16 @@ async def main():
 
     try:
         # async with MCPBus(SERVER_SCRIPTS) as bus:
-        builder = HardQABuilder(llm, None, AsyncGeminiClient(max_concurrent=5))
+        builder = HardQABuilder(llm, None, AsyncGeminiClient(max_concurrent=40))
 
         out_path = Path(OUTPUT_JSONL)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         print(f"Starting generation with {len(ENTITIES)} entities...")
         kept = 0
+
+        qas = await builder.find_batch_hard_qa_for_entity(ENTITIES[:2])
+        print(qas)
 
         with out_path.open("w", encoding="utf-8") as f:
             for i, entity in enumerate(ENTITIES, 1):
@@ -374,6 +571,8 @@ async def main():
         print("\n⚠️ Process interrupted by user")
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"\n❌ Unexpected error: {e}")
         raise
 

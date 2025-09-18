@@ -108,6 +108,10 @@ class AsyncGeminiClient:
         Returns:
             生成的文本内容或完整数据字典
         """
+
+        if prompt == "skip this time":
+            return None
+
         async with self.semaphore:
             try:
                 config = self.default_config.copy()

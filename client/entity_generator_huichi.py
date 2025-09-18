@@ -390,7 +390,7 @@ async def run_pipeline(
         if gemini_filter: 
             from utils.async_gemini import AsyncGeminiClient
             from google.genai import types
-            response_format
+            
             gemini_client = AsyncGeminiClient(max_concurrent=80, model="gemini-2.5-pro")
             prompts = [Entity_Verify.format(Entity=Entity.entity) for Entity in deduped]
             responses = await gemini_client.generate_batch(

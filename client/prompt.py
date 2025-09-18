@@ -532,3 +532,5 @@ Your entire response MUST be a single JSON object enclosed in a ```json code blo
 
 # ENTITY TO ANALYZE:
 ** {Entity} **"""
+
+basic_qa_extract_content = "Visit the website and extract all content from it, summarize the content of this URL in one sentence and output that sentence on the first line, and output the entire context in Markdown format :{url}"
