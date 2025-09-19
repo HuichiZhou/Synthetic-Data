@@ -1,6 +1,7 @@
 from __future__ import annotations
 from multiprocessing import pool
 import sys
+from collections import defaultdict  
 
 from utils.text_utils import response_format
 from utils.async_gemini import AsyncGeminiClient
@@ -34,7 +35,7 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # 可选，代理时使用
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o")
 
 # 实体数据源配置
-ENTITY_SOURCE_FILE = r"result/result_v2_locale.jsonl"
+ENTITY_SOURCE_FILE = r"/home/abaka/zhc/new/Synthetic-Data-main/client/out/pde/Partial_differential_equations.jsonl"
 ENTITIES = []
 
 # 搜索与抓取配置
@@ -47,14 +48,16 @@ MAX_PAGES_TO_TRY_PER_ENTITY = 30  # 每个实体至多尝试多少不同网页
 VET_ATTEMPTS_PER_QA = 8  # 校验次数（都失败才保留）
 
 # 输出配置
-OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", r"result/reverse_qa_hard.jsonl")
+OUTPUT_JSONL = os.getenv("OUTPUT_JSONL", r"result/pde_qa_hard.jsonl")
 
 # ======================= 初始化 =======================
 # 加载实体数据
 with open(ENTITY_SOURCE_FILE, "r", encoding="utf-8") as f:
     for line in f:
+        
         rec = json.loads(line)
-        ENTITIES.append(rec["entity"])
+        if rec['entity_verified']['is_unique_entity'] == True:
+            ENTITIES.append(rec["entity"])
 
 # ======================= LLM 封装 =======================
 
@@ -392,16 +395,41 @@ class HardQABuilder:
         if not all_urls:
             return {key: [] for key in entitys.keys()}
 
-        temps = [0.0, 0.2, 0.4, 0.7, 0.9, 0.3, 0.6, 0.8][:VET_ATTEMPTS_PER_QA]
+        # temps = [0.0, 0.2, 0.4, 0.7, 0.9, 0.3, 0.6, 0.8][:VET_ATTEMPTS_PER_QA]
+        temps = [0.0][:VET_ATTEMPTS_PER_QA]
+
         for t in temps:
                 try:
-                    flat_results = await self.gemini_client.generate_batch(prompts, system_instruction=VET_SYSTEM, config_override=types.GenerateContentConfig(temperature=t, tools=[{"url_context": {}}]))
+                    grounding_tool = types.Tool(google_search=types.GoogleSearch())
+                    config = types.GenerateContentConfig(temperature=t, tools=[grounding_tool])
+
+                    flat_results = await self.gemini_client.generate_batch(prompts, system_instruction=VET_SYSTEM, config_override=config)
                     for idx, j in enumerate(flat_results):
                         if j is None:
                             continue
-                        pred = (response_format(j['text'][-1]) or {}).get("answer") or ""
+                        print("=======================")
+                        print("vet_qa_batch")
+                        print("=======================")
                         try:
-                            if answer_matches(str(pred), qa_answer[idx]):
+                            # 尝试解析响应格式
+                            response_data = response_format(j['text'][-1]) or {}
+                            pred = response_data.get("answer") or ""
+                        except ValueError as e:
+                            print(f"[WARNING] 跳过索引 {idx} 的响应解析失败: {e}")
+                            print(f"[DEBUG] 原始响应: {repr(j['text'][-1])}")
+                            pred = ""
+                        except Exception as e:
+                            print(f"[ERROR] 处理索引 {idx} 时发生未知错误: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            pred = ""
+                        
+                        print("=======================")
+                        print(pred, qa_answer[idx])
+                        print("=======================")
+
+                        try:
+                            if pred and answer_matches(str(pred), qa_answer[idx]):
                                 prompts[idx] = "skip this time"
                                 result[idx] = True
                         except Exception as e:
@@ -480,11 +508,30 @@ class HardQABuilder:
         qa = await self.gen_qa_batch_from_page(p_list)
 
         veted_qa = await self.vet_qa_batch(qa)
+            
+        # 仅保留“未通过校验”的 hard QA
+        hard_only: Dict[str, List[Dict[str, str]]] = defaultdict(list)
+        for entity, items in veted_qa.items():
+            for passed, qa_pack in items:
+                if passed:
+                    continue
+                qa_json, page_meta = qa_pack  # qa_json: {"question","answer","evidence_quote",...}
+                # page_meta 结构：((crawl_title, page_text), (search_title, url))
+                crawl_title, _page_text = page_meta[0]
+                search_title, url = page_meta[1]
+                record = {
+                    "entity": entity,
+                    "question": (qa_json.get("question") or "").strip(),
+                    "answer": (qa_json.get("answer") or "").strip(),
+                    "evidence_quote": (qa_json.get("evidence_quote") or "").strip(),
+                    "url": (url or "").strip(),
+                    "title": (crawl_title or search_title or "").strip(),
+                }
+                # 只收集有效条目
+                if record["question"] and record["answer"] and record["url"]:
+                    hard_only[entity].append(record)
 
-        formated_veted_qa = {}
-        
-
-        return veted_qa
+        return hard_only
 
     async def find_one_hard_qa_for_entity(self, entity: str) -> Optional[QAPair]:
         results = await self.search(entity, RESULTS_PER_ENTITY)
@@ -537,7 +584,7 @@ async def main():
         print(f"Starting generation with {len(ENTITIES)} entities...")
         kept = 0
 
-        qas = await builder.find_batch_hard_qa_for_entity(ENTITIES[:2])
+        qas = await builder.find_batch_hard_qa_for_entity(ENTITIES[:1])
         print(qas)
 
         with out_path.open("w", encoding="utf-8") as f:
